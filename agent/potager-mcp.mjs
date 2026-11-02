@@ -5,6 +5,7 @@
  *   node agent/potager-mcp.mjs inscription         crée le compte du jardinier avec un code d'invitation
  *   node agent/potager-mcp.mjs outil <nom> [json]  lance un outil à la main (essais, scripts)
  *   node agent/potager-mcp.mjs surveiller          alertes du moment, pour une tâche planifiée en mode surveillance
+ *   node agent/potager-mcp.mjs bibliotheque [dir]  (ré)indexe les livres (EPUB, TXT, MD) de ~/potager-livres
  *
  * Aucune dépendance : seulement Node.js 20 ou plus. */
 import { createInterface } from 'node:readline';
@@ -14,6 +15,7 @@ import { join } from 'node:path';
 import { Potager, lireConfig, ecrireConfig, FICHIER_CONFIG, CACHE } from './noyau.mjs';
 import { OUTILS, alertesDuMoment } from './outils.mjs';
 import { texteAlertes } from './alertes.mjs';
+import { indexer, DOSSIER_LIVRES } from './bibliotheque.mjs';
 
 const VERSION = '1.0.0';
 const CONSIGNES = "Outils du potager familial : l'état réel du jardin (plan, graines, journal), le calendrier et la météo calculés pour son lieu. " +
@@ -108,11 +110,20 @@ const [commande, ...args] = process.argv.slice(2);
 if (!commande) serveurMcp();
 else if (commande === 'inscription') inscription().catch((e) => { console.error('❌ ' + e.message); process.exit(1); });
 else if (commande === 'surveiller') surveiller();
+else if (commande === 'bibliotheque') {
+  try {
+    const r = indexer(args[0] || DOSSIER_LIVRES);
+    console.log(`${r.livres.length} livre(s), ${r.passages} passages indexés :`);
+    for (const l of r.livres) console.log(`- « ${l.titre} »${l.auteur ? ` – ${l.auteur}` : ''} : ${l.passages} passages`);
+    if (r.ignores.length) console.log(`Illisibles : ${r.ignores.join(', ')}`);
+    if (r.autres.length) console.log(`Formats non pris en charge (convertir en EPUB ou TXT) : ${r.autres.join(', ')}`);
+  } catch (e) { console.error('❌ ' + e.message); process.exit(1); }
+}
 else if (commande === 'outil') {
   appeler(args[0], args[1] ? JSON.parse(args[1]) : {})
     .then((t) => console.log(t))
     .catch((e) => { console.error('❌ ' + e.message); process.exit(1); });
 } else {
-  console.error('Commandes : (aucune) | inscription | outil <nom> [json] | surveiller');
+  console.error('Commandes : (aucune) | inscription | outil <nom> [json] | surveiller | bibliotheque [dossier]');
   process.exit(1);
 }

@@ -2,6 +2,7 @@
  * Chaque outil renvoie un texte en français, lisible par l'agent et facile à reformuler. */
 import { App, U, G, Calendrier, Climat, PLANTES, PLANTES_PAR_ID, FAMILLES, CATEGORIES, saisonCourante } from './noyau.mjs';
 import { meteoAlertes, calculerAlertes, texteAlertes } from './alertes.mjs';
+import { chercher, livres, DOSSIER_LIVRES } from './bibliotheque.mjs';
 
 const { fmtDate, fmtDateLongue, aujourdhui, ajouterJours, isoDate, lireIso, normaliser, uid } = U;
 const PP = PLANTES_PAR_ID;
@@ -401,6 +402,30 @@ outil('bilan',
     return [`Bilan ${annee} — ${ent.length} entrée(s) au journal${parType.length ? ` (${parType.join(', ')})` : ''}.`,
       `Récoltes (${+total.toFixed(2)} kg au total) :\n${liste(recoltes, '(aucune récolte notée)')}`,
       `Problèmes notés :\n${liste(problemes, '(aucun)')}`].join('\n');
+  });
+
+// ---------- Bibliothèque ----------
+const BIBLIOTHEQUE_VIDE = `La bibliothèque est vide : déposer des livres (EPUB, TXT ou MD) dans ${DOSSIER_LIVRES} puis lancer « node agent/potager-mcp.mjs bibliotheque ».`;
+
+outil('chercher_dans_les_livres',
+  "Cherche dans la bibliothèque de livres de jardinage de la famille et renvoie les passages les plus pertinents, avec le titre, l'auteur et le chapitre. Formuler la recherche avec les mots importants (plante, problème, technique, saison). Citer le livre dans la réponse, et croiser avec les outils du potager pour ce qui dépend du lieu (dates, météo).",
+  { question: { type: 'string', description: 'Ex. « pucerons sur les fèves », « tailler les tomates », « purin d\'ortie ».' }, nombre: { type: 'integer', minimum: 1, maximum: 8, description: 'Nombre de passages (4 par défaut).' } }, ['question'],
+  async (pg, { question, nombre = 4 }) => {
+    const r = App.reconnaitre(question);
+    const p = r && r.pid && PP[r.pid];
+    const res = chercher(question, nombre, p ? [p.n, p.l, ...(p.al || [])] : []);
+    if (res === null) return BIBLIOTHEQUE_VIDE;
+    if (!res.length) return `Aucun passage ne correspond à « ${question} » dans les livres.`;
+    return res.map((x, k) => `[${k + 1}] « ${x.livre.titre.split(' / ')[0]} »${x.livre.auteur ? ` (${x.livre.auteur})` : ''}${x.c ? ` — ${x.c}` : ''}\n${x.t}`).join('\n\n') +
+      "\n\n(Extraits à citer avec leur source. Un livre ancien peut conseiller des produits aujourd'hui interdits ou des pratiques dépassées : le signaler.)";
+  });
+
+outil('livres',
+  'Liste les livres de la bibliothèque de jardinage (titre, auteur, nombre de passages).',
+  {}, [], async () => {
+    const l = livres();
+    if (!l) return BIBLIOTHEQUE_VIDE;
+    return `${l.length} livre(s) :\n${liste(l.map((x) => `« ${x.titre} »${x.auteur ? ` – ${x.auteur}` : ''} (${x.passages} passages)`), '(aucun)')}`;
   });
 
 // Alertes du moment (aussi utilisées par la surveillance planifiée, voir potager-mcp.mjs « surveiller »).

@@ -17,8 +17,21 @@ Aucune dépendance : Node.js 20 ou plus suffit.
 | `verifier_plan` | Voisinages et rotations du plan de la saison |
 | `lister_graines` / `ajouter_graines` / `modifier_graine` / `retirer_graine` | Stock de graines, avec les notes du sachet |
 | `noter_journal` / `lire_journal` / `bilan` | Journal (avec auteur et photos) et bilan des récoltes |
+| `chercher_dans_les_livres` / `livres` | Passages des livres de jardinage de la famille, avec titre, auteur et chapitre |
 | `alertes` | Gel, forte chaleur, manque d'eau, orage des 3 prochains jours, seulement pour les cultures en terre |
 | `point_de_la_semaine` | Tout pour le point du lundi : à faire, météo, alertes, graines à prévoir, semaine passée |
+
+## Bibliothèque
+
+Déposer les livres (EPUB, ou TXT / MD) dans `~/potager-livres` (ou `POTAGER_LIVRES`) sur la machine de l'agent, puis :
+
+```bash
+node agent/potager-mcp.mjs bibliotheque
+```
+
+Chaque livre est découpé en passages d'environ 1 400 caractères (sans couper un paragraphe ni mélanger deux chapitres) ; l'index va dans le cache. La recherche (`bibliotheque.mjs`) est une recherche par mots-clés classée par pertinence (BM25), adaptée au français : sans accents ni mots vides, pluriels et terminaisons courantes ramenés à la même racine ; le nom d'une plante reconnue dans la question ajoute ses synonymes et son nom latin. Les passages qui se suivent sont réunis. Les PDF ne sont pas lus : les convertir en EPUB (Calibre) ou en texte.
+
+Les livres restent sur cette machine : ne jamais les ajouter au dépôt (public).
 
 ## Alertes et point du lundi
 
