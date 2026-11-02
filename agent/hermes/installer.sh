@@ -32,4 +32,17 @@ fi
 echo "6. Dossier des livres : ~/potager-livres"
 mkdir -p "$HOME/potager-livres"
 
+echo "7. Tâches planifiées : alertes (toutes les heures) et point du lundi 8 h, à l'heure de Paris"
+"$HERMES" -p "$PROFIL" config set timezone Europe/Paris
+JOBS=$("$HERMES" -p "$PROFIL" cron list 2>/dev/null || true)
+if ! echo "$JOBS" | grep -q "Alertes du potager"; then
+  # Le message d'échec éventuel reste dans « hermes cron list » : pas de notification toutes les heures.
+  "$HERMES" -p "$PROFIL" cron create "every 1h" "$(cat "$DEPOT/agent/hermes/consigne-alertes.md")" \
+    --name "Alertes du potager" --monitor-script potager-alertes.sh --deliver telegram --failure-deliver local
+fi
+if ! echo "$JOBS" | grep -q "Point du lundi"; then
+  "$HERMES" -p "$PROFIL" cron create "0 8 * * 1" "$(cat "$DEPOT/agent/hermes/consigne-lundi.md")" \
+    --name "Point du lundi" --deliver telegram
+fi
+
 echo "Terminé."
