@@ -179,6 +179,11 @@ dl.faits dd { margin: 0; font-weight: 500; }
 .plan-svg .nom-structure.clair { fill: #fff; stroke: rgba(60, 40, 20, 0.6); }
 .plan-svg .etiquette-rotation { fill: #a31515; font-weight: 600; font-family: system-ui, sans-serif; paint-order: stroke; stroke: #fff; stroke-linejoin: round; }
 .plan-svg .cote { fill: var(--bleu); font-weight: 600; font-family: system-ui, sans-serif; paint-order: stroke; stroke: #fff; stroke-linejoin: round; }
+.boussole-zone { position: absolute; top: 0.6rem; right: 0.6rem; display: flex; flex-direction: column; align-items: center; gap: 0.1rem; }
+.boussole { padding: 0; border: none; background: none; border-radius: 50%; cursor: grab; touch-action: none; line-height: 0; filter: drop-shadow(0 1px 2px rgba(30, 40, 20, 0.25)); }
+.boussole:active { cursor: grabbing; }
+.boussole-angle { font-size: 0.75rem; color: var(--doux); background: rgba(255, 255, 255, 0.85); border-radius: 4px; padding: 0 0.3em; }
+.boussole-angle:empty { display: none; }
 .aide-plan { position: absolute; left: 0.6rem; bottom: 0.6rem; right: 0.6rem; background: rgba(255, 255, 255, 0.92); border-radius: 8px; padding: 0.4rem 0.7rem; font-size: 0.84rem; color: var(--doux); pointer-events: none; max-width: 640px; }
 .titre-plante { display: flex; gap: 0.6rem; align-items: center; margin-bottom: 0.4rem; }
 .titre-plante h3 { margin: 0; }

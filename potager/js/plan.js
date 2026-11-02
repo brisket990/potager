@@ -34,6 +34,14 @@
   };
   let svg, groupe, panneau, palette, geste = null;
 
+  // Orientation de la vue en degrés, sens horaire (0 = nord en haut). Enregistrée avec le potager.
+  const angleVue = () => App.etat.orientation || 0;
+  const centreJardin = () => [App.etat.jardin.largeur / 2, App.etat.jardin.hauteur / 2];
+  function tourner([x, y], deg, [cx, cy]) {
+    const a = (deg * Math.PI) / 180, dx = x - cx, dy = y - cy;
+    return [cx + dx * Math.cos(a) - dy * Math.sin(a), cy + dx * Math.sin(a) + dy * Math.cos(a)];
+  }
+
   const objets = () => App.plan().objets;
   const trouver = (id) => objets().find((o) => o.id === id);
   const enregistrer = () => App.sauver();
@@ -93,7 +101,7 @@
     svg.addEventListener('pointercancel', surRelache);
     svg.addEventListener('wheel', surMolette, { passive: false });
 
-    const zone = h('div', { class: 'zone-plan' }, svg,
+    const zone = h('div', { class: 'zone-plan' }, svg, boussole(),
       ed.soleil ? reglette() : null,
       (App.etat.fond || {}).type === 'photo' && App.etat.geo ? h('div', { class: 'legende-flottante bas-droite note' }, "Photo aérienne © IGN. Elle peut dater d'un ou deux ans.") : null,
       h('div', { class: 'aide-plan' }, aideOutil()));
@@ -188,9 +196,72 @@
     const r = svg.getBoundingClientRect();
     if (!r.width) return;
     const { largeur, hauteur } = App.etat.jardin;
-    const s = Math.min((r.width - 60) / largeur, (r.height - 60) / hauteur);
-    ed.vue = { s, x: (r.width - largeur * s) / 2, y: (r.height - hauteur * s) / 2 };
+    // Encombrement du terrain tel qu'il est affiché (éventuellement pivoté).
+    const coins = [[0, 0], [largeur, 0], [largeur, hauteur], [0, hauteur]].map((p) => tourner(p, angleVue(), centreJardin()));
+    const xs = coins.map((p) => p[0]), ys = coins.map((p) => p[1]);
+    const x0 = Math.min(...xs), y0 = Math.min(...ys), W = Math.max(...xs) - x0, H = Math.max(...ys) - y0;
+    const s = Math.min((r.width - 60) / W, (r.height - 60) / H);
+    ed.vue = { s, x: (r.width - W * s) / 2 - x0 * s, y: (r.height - H * s) / 2 - y0 * s };
     dessiner();
+  }
+
+  // ---------- Boussole : oriente la vue ----------
+  // Clic : quart de tour. Glisser : l'aiguille suit le pointeur (pas de 5°, 1° avec Maj).
+  function boussole() {
+    const aiguille = h('svg:g', {},
+      h('svg:path', { d: 'M 0 -17 L 6 0 L -6 0 Z', fill: '#c62828' }),
+      h('svg:path', { d: 'M 0 17 L 6 0 L -6 0 Z', fill: '#9e9e9e' }),
+      h('svg:circle', { r: 2.2, fill: '#fff', stroke: '#3a4a33', 'stroke-width': 1 }),
+      h('svg:text', { y: -21, 'text-anchor': 'middle', 'font-size': 10, 'font-weight': 700, fill: '#3a4a33' }, 'N'));
+    const bouton = h('button', { class: 'boussole', type: 'button', 'aria-label': "Orientation du plan : cliquer pour tourner d'un quart de tour, glisser pour orienter librement" },
+      h('svg:svg', { viewBox: '-30 -30 60 60', width: 56, height: 56, 'aria-hidden': 'true' },
+        h('svg:circle', { r: 27, fill: 'rgba(255,255,255,0.94)', stroke: '#9bb07f', 'stroke-width': 1.5 }), aiguille));
+    const etiquette = h('span', { class: 'boussole-angle' });
+    const maj = () => {
+      const a = angleVue();
+      aiguille.setAttribute('transform', `rotate(${a})`);
+      etiquette.textContent = a ? `${Math.round(a)}°` : '';
+      bouton.title = a ? `Nord tourné de ${Math.round(a)}°. Clic : quart de tour. Glisser : orienter librement.` : 'Nord en haut. Clic : quart de tour. Glisser : orienter librement.';
+    };
+    const orienter = (a) => {
+      a = ((Math.round(a * 10) / 10) % 360 + 360) % 360;
+      if (a) App.etat.orientation = a; else delete App.etat.orientation;
+      maj();
+    };
+    let glisse = null;
+    bouton.addEventListener('pointerdown', (e) => {
+      bouton.setPointerCapture(e.pointerId);
+      const r = bouton.getBoundingClientRect();
+      glisse = { cx: r.left + r.width / 2, cy: r.top + r.height / 2, x: e.clientX, y: e.clientY, bouge: false };
+    });
+    bouton.addEventListener('pointermove', (e) => {
+      if (!glisse || (!glisse.bouge && Math.hypot(e.clientX - glisse.x, e.clientY - glisse.y) < 4)) return;
+      glisse.bouge = true;
+      const a = (Math.atan2(e.clientX - glisse.cx, glisse.cy - e.clientY) * 180) / Math.PI;
+      orienter(e.shiftKey ? Math.round(a) : Math.round(a / 5) * 5);
+      dessiner();
+    });
+    bouton.addEventListener('pointerup', () => {
+      if (!glisse) return;
+      if (!glisse.bouge) orienter((Math.floor(angleVue() / 90 + 0.001) + 1) * 90);
+      glisse = null;
+      enregistrer();
+      ajuster();
+    });
+    bouton.addEventListener('pointercancel', () => { glisse = null; });
+    bouton.addEventListener('click', (e) => {
+      if (e.detail) return; // souris : déjà traité au relâchement
+      orienter((Math.floor(angleVue() / 90 + 0.001) + 1) * 90);
+      enregistrer(); ajuster();
+    });
+    bouton.addEventListener('keydown', (e) => {
+      if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+      e.preventDefault(); e.stopPropagation();
+      orienter(angleVue() + (e.key === 'ArrowRight' ? 5 : -5));
+      enregistrer(); ajuster();
+    });
+    maj();
+    return h('div', { class: 'boussole-zone' }, bouton, etiquette);
   }
   function zoomer(f, cx, cy) {
     const r = svg.getBoundingClientRect();
@@ -206,7 +277,8 @@
   function dessiner() {
     if (!groupe || !ed.vue) return;
     const { s, x, y } = ed.vue;
-    groupe.setAttribute('transform', `translate(${x},${y}) scale(${s})`);
+    const av = angleVue(), [cxj, cyj] = centreJardin();
+    groupe.setAttribute('transform', `translate(${x},${y}) scale(${s})` + (av ? ` rotate(${av} ${cxj} ${cyj})` : ''));
     const { largeur, hauteur } = App.etat.jardin;
     const els = [];
     const fs = (px) => px / s; // taille en mètres pour une taille écran voulue
@@ -227,10 +299,6 @@
     for (const anneau of Terrain.contoursLocaux(App.etat.geo)) {
       els.push(S('polygon', { points: anneau.map((p) => p.join(',')).join(' '), fill: 'none', stroke: '#5d4037', 'stroke-width': 2.5, 'stroke-dasharray': '10 4 2 4', 'vector-effect': 'non-scaling-stroke', 'pointer-events': 'none' }));
     }
-    // Flèche du nord (le plan est toujours orienté nord en haut).
-    els.push(S('g', { transform: `translate(${largeur + fs(22)},${fs(4)})`, 'pointer-events': 'none' },
-      S('path', { d: `M 0 0 L ${fs(7)} ${fs(18)} L 0 ${fs(13)} L ${-fs(7)} ${fs(18)} Z`, fill: '#3a4a33' }),
-      S('text', { x: 0, y: fs(32), 'font-size': fs(12), 'text-anchor': 'middle', class: 'grad', 'font-weight': 700 }, 'N')));
     if (ed.instant && ed.instant.pos.el > 0) {
       const { az, el } = ed.instant.pos;
       const cx = largeur / 2, cy = hauteur / 2, R = Math.hypot(largeur, hauteur) / 2 + fs(34);
@@ -288,15 +356,26 @@
     }
     if (geste && geste.type === 'trace') {
       const r = rectGeste(geste);
-      els.push(S('rect', { x: r.x, y: r.y, width: r.w, height: r.h, fill: 'rgba(21,101,192,0.12)', stroke: '#1565c0', 'stroke-width': 1.5, 'stroke-dasharray': '4 3', 'vector-effect': 'non-scaling-stroke', 'pointer-events': 'none' }));
+      const gt = S('g', { transform: transformee(r), 'pointer-events': 'none' },
+        S('rect', { x: r.x, y: r.y, width: r.w, height: r.h, fill: 'rgba(21,101,192,0.12)', stroke: '#1565c0', 'stroke-width': 1.5, 'stroke-dasharray': '4 3', 'vector-effect': 'non-scaling-stroke' }));
       if (r.w > 0.05 && r.h > 0.05) {
         const txt = ed.outil === 'plante'
           ? `${Math.round(r.w * 100)} × ${Math.round(r.h * 100)} cm · ${App.nbPlants({ pid: ed.pid, w: r.w, h: r.h })} plants`
           : `${Math.round(r.w * 100)} × ${Math.round(r.h * 100)} cm`;
-        els.push(S('text', { x: r.x + r.w / 2, y: r.y - fs(6), 'font-size': fs(12), 'text-anchor': 'middle', class: 'cote', 'stroke-width': fs(3) }, txt));
+        gt.append(S('text', { x: r.x + r.w / 2, y: r.y - fs(6), 'font-size': fs(12), 'text-anchor': 'middle', class: 'cote', 'stroke-width': fs(3) }, txt));
       }
+      els.push(gt);
     }
     groupe.replaceChildren(...els);
+    // Vue pivotée : chaque texte est tourné en sens inverse autour de son centre pour rester lisible.
+    if (av) {
+      for (const t of groupe.querySelectorAll('text')) {
+        let c;
+        if (t.getAttribute('text-anchor') === 'middle' && t.getAttribute('dominant-baseline') === 'central') c = [t.getAttribute('x'), t.getAttribute('y')];
+        else { const b = t.getBBox(); c = [b.x + b.width / 2, b.y + b.height / 2]; }
+        t.setAttribute('transform', `rotate(${-av} ${c[0]} ${c[1]})`);
+      }
+    }
   }
 
   const transformee = (o) => (o.rot && !ROND.has(o.t) ? `rotate(${o.rot} ${o.x + o.w / 2} ${o.y + o.h / 2})` : null);
@@ -399,12 +478,24 @@
   // ---------- Souris / tactile ----------
   function point(e) {
     const r = svg.getBoundingClientRect();
-    return [(e.clientX - r.left - ed.vue.x) / ed.vue.s, (e.clientY - r.top - ed.vue.y) / ed.vue.s];
+    const p = [(e.clientX - r.left - ed.vue.x) / ed.vue.s, (e.clientY - r.top - ed.vue.y) / ed.vue.s];
+    return angleVue() ? tourner(p, -angleVue(), centreJardin()) : p;
   }
+  // Rectangle tracé : aligné sur l'écran. Si la vue est pivotée d'un angle quelconque, l'objet reçoit la rotation inverse.
   function rectGeste(g) {
-    const [x0, y0] = g.depart, [x1, y1] = g.actuel;
-    const x = arrondi(Math.min(x0, x1)), y = arrondi(Math.min(y0, y1));
-    return { x, y, w: arrondi(Math.max(x0, x1) - x), h: arrondi(Math.max(y0, y1) - y) };
+    const av = angleVue();
+    if (av % 90 === 0) {
+      const [x0, y0] = g.depart, [x1, y1] = g.actuel;
+      const x = arrondi(Math.min(x0, x1)), y = arrondi(Math.min(y0, y1));
+      return { x, y, w: arrondi(Math.max(x0, x1) - x), h: arrondi(Math.max(y0, y1) - y) };
+    }
+    const c = centreJardin();
+    const [x0, y0] = tourner(g.depart, av, c), [x1, y1] = tourner(g.actuel, av, c);
+    const w = arrondi(Math.abs(x1 - x0)), hh = arrondi(Math.abs(y1 - y0));
+    const [mx, my] = tourner([(x0 + x1) / 2, (y0 + y1) / 2], -av, c);
+    const r = { x: +(mx - w / 2).toFixed(3), y: +(my - hh / 2).toFixed(3), w, h: hh };
+    definirRotation(r, -av);
+    return r;
   }
 
   function surAppui(e) {
@@ -483,6 +574,7 @@
         const p = PLANTES_PAR_ID[ed.pid];
         const e = Math.max(0.1, p.esp[0] / 100);
         o = clic ? { x: arrondi(g.depart[0] - e / 2), y: arrondi(g.depart[1] - e / 2), w: arrondi(e), h: arrondi(e) } : r;
+        if (clic && angleVue() % 90) definirRotation(o, -angleVue());
         Object.assign(o, { id: uid(), t: 'plante', pid: p.id, mode: 'bloc' });
         const contenant = objets().find((c) => (c.t === 'bac' || Calendrier.ABRIS[c.t]) && c.rot && G.dedans(G.centre(o), c));
         if (contenant) o.rot = contenant.rot;
@@ -491,9 +583,11 @@
       } else {
         const s = STRUCTURES[ed.outil];
         o = clic ? { x: arrondi(g.depart[0] - s.w / 2), y: arrondi(g.depart[1] - s.h / 2), w: s.w, h: s.h } : r;
+        if (clic && angleVue() % 90) definirRotation(o, -angleVue());
         Object.assign(o, { id: uid(), t: s.type || ed.outil });
         if (o.t === 'arbre') Object.assign(o, { essence: 'autre_caduc', caduc: true });
         if (ROND.has(o.t) && !clic) o.h = o.w = Math.max(r.w, r.h);
+        if (ROND.has(o.t)) delete o.rot;
       }
       objets().push(o);
       ed.sel = o.id;
@@ -527,10 +621,11 @@
     else if (e.key.startsWith('Arrow') && !o.verrou) {
       e.preventDefault();
       const d = e.shiftKey ? 0.5 : PAS;
-      if (e.key === 'ArrowLeft') o.x = arrondi(o.x - d);
-      if (e.key === 'ArrowRight') o.x = arrondi(o.x + d);
-      if (e.key === 'ArrowUp') o.y = arrondi(o.y - d);
-      if (e.key === 'ArrowDown') o.y = arrondi(o.y + d);
+      // Direction à l'écran, ramenée à l'axe du plan le plus proche si la vue est pivotée.
+      const ecran = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] }[e.key];
+      const [dx, dy] = tourner(ecran, -angleVue(), [0, 0]);
+      if (Math.abs(dx) >= Math.abs(dy)) o.x = arrondi(o.x + Math.sign(dx) * d);
+      else o.y = arrondi(o.y + Math.sign(dy) * d);
       enregistrer(); dessiner();
     }
   });

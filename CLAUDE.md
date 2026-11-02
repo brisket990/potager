@@ -28,6 +28,7 @@ HTML/CSS/JavaScript **sans framework ni étape de build** : scripts classiques (
 
 Conventions utiles :
 - Coordonnées du plan en **mètres**, x vers l'est, y vers le sud (nord en haut). Objets `{id, t, x, y, w, h, rot?}`, `rot` en degrés autour du centre.
+- Seul l'affichage peut pivoter : `App.etat.orientation` (degrés, sens horaire, absent = nord en haut), réglé par la boussole de l'éditeur (clic = quart de tour, glisser = libre). Les données restent en coordonnées nord-sud ; dans `plan.js`, passer par `point()` pour convertir un clic, et les textes sont contre-tournés pour rester lisibles.
 - Modifier l'état puis `App.sauver()` ; `App.rendre()` reconstruit la vue (l'éditeur de plan redessine localement avec `dessiner()` pendant les gestes).
 - Données : `localStorage['potager']` (état JSON), IndexedDB `potager` (photos du journal + `grille:soleil`). Connecté : `localStorage['pb_auth']` (jeton), `['synchro']` (potager lié, version, dernier état commun, modifications en attente), `['serveur']` (adresse PocketBase si différente).
 - `App.sauver()` prévient `Synchro.modifie()`, qui envoie quelques instants après la dernière modification. Tout ce qui est dans `App.etat` est partagé, sauf les clés de `LOCAL` dans `synchro.js` (la saison affichée). Les listes d'objets avec un `id` se fusionnent élément par élément : garder un `id` sur tout nouvel élément de liste.
