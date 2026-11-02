@@ -1,0 +1,4 @@
+#!/bin/sh
+# Node.js embarqué par Hermes Agent (son dossier change à chaque mise à jour d'Hermes) ; à copier dans ~/.local/bin.
+NODE=$(ls -d "$HOME"/.hermes/tools/node-*/bin/node 2>/dev/null | sort -V | tail -1)
+exec "${NODE:-node}" "$@"

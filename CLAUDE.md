@@ -62,7 +62,7 @@ Solution retenue : **PocketBase auto-hébergé sur Coolify** (service en un clic
 3. ✅ Dans l'app (`js/synchro.js`) : connexion, **création de compte uniquement avec un code d'invitation** (choix de l'utilisateur ; le tout premier compte est créé dans le tableau de bord), mise en ligne des données locales, invitation par code ou lien `#code=…`, synchronisation en direct avec copie locale hors ligne, fusion des modifications simultanées, photos. Testé le 2026-11-02 sur PocketBase local avec deux navigateurs. Les vraies données sont dans le navigateur du premier poste : c'est là qu'il faut faire « Mettre mon potager en ligne ».
 4. Servir l'app en site statique (Coolify depuis ce dépôt, ou GitHub Pages) : `https://potager.xothiques.duckdns.org`.
 
-Crochet serveur `pocketbase/pb_hooks/versions.pb.js` : rend atomique la vérification de version (sans lui, des enregistrements simultanés s'effacent). Sur Coolify, volume `pocketbase-hooks` monté sur `/app/pb_hooks` ; **pas encore installé sur le serveur**.
+Crochet serveur `pocketbase/pb_hooks/versions.pb.js` : rend atomique la vérification de version (sans lui, des enregistrements simultanés s'effacent). Installé le 2026-11-02 sur Coolify comme fichier monté `/app/pb_hooks/versions.pb.js` du service PocketBase (via l'API, contenu copié du dépôt : le remettre à jour s'il change). Effet à confirmer par un essai de deux enregistrements simultanés (l'un doit recevoir 400 `version_depassee`) quand le compte du jardinier existera.
 
 ## Agent jardinier (Hermes Agent, Telegram)
 
