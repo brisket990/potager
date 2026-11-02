@@ -21,7 +21,7 @@ Règles d'accès :
 ## Mise en place (une seule fois)
 
 1. **Compte administrateur** : dans Coolify, ouvrir Potager → production → pocketbase → Logs, copier le lien contenant `/_/#/pbinstal/`, remplacer `http://0.0.0.0:8080` par `https://pb.xothiques.duckdns.org`, l'ouvrir et créer le compte. Lien expiré : redémarrer le service, un nouveau lien apparaît.
-2. **Importer les collections** : Settings → Import collections → « Load from JSON file » → choisir `collections.json` → Review → Confirm. Laisser décochée l'option qui supprime les collections absentes du fichier.
+2. **Importer les collections** : Settings → Import collections → « Load from JSON file » → choisir `collections.json` → **activer « Merge with the existing collections »** → Review → Confirm. Sans cette option, PocketBase supprimerait `users` et ses collections internes (erreur « The relation collection doesn't exist ») : dans « Detected changes », il ne doit y avoir aucune ligne « Deleted », seulement les 4 ajouts.
 3. **Inscription seulement avec un code** : collection `users` → ⚙️ :
    - onglet Fields : « New field » → Relation, nom `invitation`, collection `invitations`, une seule valeur, non obligatoire → Save ;
    - onglet API Rules : **Create rule** = `invitation.expire > @now` → Save.
