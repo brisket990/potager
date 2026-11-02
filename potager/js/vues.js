@@ -256,7 +256,7 @@
           h('input', { type: 'search', placeholder: 'Filtrer…', value: gr.recherche, 'aria-label': 'Filtrer mes graines', oninput: (e) => { gr.recherche = e.target.value; const pos = e.target.selectionStart; App.rendre(); const c = document.querySelector('.tete-tableau input'); c.focus(); c.setSelectionRange(pos, pos); } }),
           h('button', { class: 'bouton petit', onclick: exporterCsv, disabled: !App.etat.graines.length }, '⬇️ Exporter (CSV)')),
         lignes.length ? h('div', { class: 'tableau-defile' }, h('table', { class: 'tableau' },
-          h('thead', {}, h('tr', {}, h('th', {}, 'Plante'), h('th', {}, 'Variété'), h('th', {}, 'Année'), h('th', {}, 'Quantité'), h('th', {}, 'Quand semer chez moi'), h('th', {}, 'Germination'), h('th', {}, ''))),
+          h('thead', {}, h('tr', {}, h('th', {}, 'Plante'), h('th', {}, 'Variété'), h('th', {}, 'Année'), h('th', {}, 'Quantité'), h('th', {}, 'Notes du sachet'), h('th', {}, 'Quand semer chez moi'), h('th', {}, 'Germination'), h('th', {}, ''))),
           h('tbody', {}, lignes.map(({ g, p, st }) => {
             const eg = App.etatGraine(g);
             return h('tr', {},
@@ -265,6 +265,7 @@
               h('td', {}, h('input', { class: 'cellule', value: g.variete || '', 'aria-label': 'Variété', onchange: (e) => App.changer(() => { g.variete = e.target.value.trim(); }, false) })),
               h('td', {}, h('input', { class: 'cellule num', type: 'number', value: g.annee || '', 'aria-label': 'Année', onchange: (e) => App.changer(() => { g.annee = +e.target.value || null; }) })),
               h('td', {}, h('input', { class: 'cellule', value: g.quantite || '', 'aria-label': 'Quantité', onchange: (e) => App.changer(() => { g.quantite = e.target.value.trim(); }, false) })),
+              h('td', {}, h('input', { class: 'cellule notes', value: g.notes || '', title: g.notes || '', 'aria-label': 'Notes du sachet', onchange: (e) => App.changer(() => { g.notes = e.target.value.trim(); }, false) })),
               h('td', {}, !st ? '–' : st.maintenant.length
                 ? h('span', { class: 'statut maintenant' }, st.maintenant.map((s) => `${Calendrier.libelle(s.type, p)} jusqu'au ${fmtDate(s.fin)}`).join(' · '))
                 : st.prochain ? h('span', { class: 'statut' }, `${Calendrier.libelle(st.prochain.type, p)} à partir du ${fmtDate(st.prochain.debut)}`) : h('span', { class: 'statut' }, 'Pas de fenêtre chez toi')),
@@ -298,8 +299,8 @@
 
   function exporterCsv() {
     const esc = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`;
-    const lignes = [['Plante', 'Variété', 'Année', 'Quantité'].join(';'),
-      ...App.etat.graines.map((g) => [(PP()[g.pid] || {}).n || g.texte, g.variete, g.annee, g.quantite].map(esc).join(';'))];
+    const lignes = [['Plante', 'Variété', 'Année', 'Quantité', 'Notes'].join(';'),
+      ...App.etat.graines.map((g) => [(PP()[g.pid] || {}).n || g.texte, g.variete, g.annee, g.quantite, g.notes].map(esc).join(';'))];
     U.telecharger('mes-graines.csv', '﻿' + lignes.join('\n'), 'text/csv');
   }
 
@@ -548,6 +549,7 @@
         h('span', {}, TYPES_JOURNAL[e.type] || e.type),
         p ? h('span', {}, App.icone(p), ' ', p.n) : null,
         e.qte ? h('strong', {}, `${e.qte} ${e.unite}`) : null,
+        e.par ? h('span', { class: 'sous' }, `par ${e.par}`) : null,
         h('span', { class: 'espace' }),
         h('button', { class: 'bouton-icone', 'aria-label': 'Supprimer', title: 'Supprimer', onclick: async () => {
           if (!confirm('Supprimer cette entrée ?')) return;

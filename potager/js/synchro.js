@@ -271,7 +271,8 @@
       majStatut('ok');
     } catch (e) {
       if (e.status === 401) sessionExpiree();
-      else if (e.status === 404 && envoi) encore = true; // quelqu'un a envoyé une version entre-temps
+      // Quelqu'un a envoyé une version entre-temps (refus de la règle d'accès, ou du crochet du serveur).
+      else if (envoi && (e.status === 404 || (e.status === 400 && e.data && e.data.data && e.data.data.version))) encore = true;
       else if (e.status === 404) {
         fermerFlux();
         App.toast(`Tu n'as plus accès au potager « ${m.nom} » (supprimé, ou tu as été retiré). Tes données restent dans ce navigateur.`, true);

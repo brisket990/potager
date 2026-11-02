@@ -32,6 +32,12 @@ Règles d'accès :
 
 Ensuite tout se fait dans l'app : créer le potager, générer un code d'invitation, et ta compagne crée son compte avec ce code.
 
+## Crochet `pb_hooks/versions.pb.js`
+
+La règle d'accès vérifie la version, mais pas de façon atomique : deux enregistrements envoyés au même instant avec la même version passeraient tous les deux, et le second effacerait le premier (testé : 21 ajouts perdus sur 48 avec 8 écritures en parallèle ; aucun avec le crochet). Le crochet refait la vérification dans la transaction d'écriture et répond 400 (`data.version = "version_depassee"`) ; l'app et l'agent relisent alors et refusionnent.
+
+Sur Coolify, le service a un volume monté sur `/app/pb_hooks` : y placer le fichier puis redémarrer le service.
+
 ## Mettre à jour un serveur déjà installé
 
 Quand `collections.json` change, le réimporter comme à l'étape 2 (avec « Merge with the existing collections » activé) : « Detected changes » doit montrer seulement des collections modifiées (« Changed »), aucune « Deleted ». Les données ne sont pas touchées.

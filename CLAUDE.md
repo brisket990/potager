@@ -21,6 +21,7 @@ HTML/CSS/JavaScript **sans framework ni étape de build** : scripts classiques (
 | `js/soleil.js` | Position du soleil, cadastre IGN (API Carto), grille d'obstacles, lancer de rayon, essences d'arbres (feuillage selon le mois) |
 | `js/terrain.js` | Import de parcelle, calcul et cache de l'ensoleillement, ombres à un instant donné, courbe et verdict par culture |
 | `js/app.js` | État global `App.etat`, abris, voisins, rotation des cultures, reconnaissance des noms de graines, navigation |
+| `agent/` | Agent jardinier : serveur MCP (`potager-mcp.mjs`) qui charge les fichiers de l'app dans Node (`noyau.mjs`) et expose des outils (`outils.mjs`) |
 | `js/synchro.js` | Compte PocketBase (connexion, inscription par code), potager partagé, invitations, synchronisation (fusion à trois, version, temps réel), photos du journal sur le serveur ; carte « Compte et potager partagé » des Réglages |
 | `js/plan.js` | Éditeur SVG : structures, obstacles (bâtiment, mur, clôture ajourée, haie, arbre), cultures, rotation des objets, fond photo aérienne, curseur d'heure du soleil |
 | `js/auto.js` | Arrangement automatique (placement glouton puis améliorations) |
@@ -60,6 +61,17 @@ Solution retenue : **PocketBase auto-hébergé sur Coolify** (service en un clic
 2. Fichier de collections prêt : [pocketbase/collections.json](pocketbase/collections.json), mise en place et parcours décrits dans [pocketbase/LISEZMOI.md](pocketbase/LISEZMOI.md). Testé le 2026-11-02 sur un PocketBase 0.40.6 local jetable (import, inscription par code, accès membres / inconnu, photos protégées : tout passe). L'utilisateur l'a importé sur le serveur et a ajouté le champ `invitation` et la règle d'inscription (le 2026-11-02, d'après ses messages) ; la règle de `version` des jardins, ajoutée ensuite, demande un réimport.
 3. ✅ Dans l'app (`js/synchro.js`) : connexion, **création de compte uniquement avec un code d'invitation** (choix de l'utilisateur ; le tout premier compte est créé dans le tableau de bord), mise en ligne des données locales, invitation par code ou lien `#code=…`, synchronisation en direct avec copie locale hors ligne, fusion des modifications simultanées, photos. Testé le 2026-11-02 sur PocketBase local avec deux navigateurs. Les vraies données sont dans le navigateur du premier poste : c'est là qu'il faut faire « Mettre mon potager en ligne ».
 4. Servir l'app en site statique (Coolify depuis ce dépôt, ou GitHub Pages) : `https://potager.xothiques.duckdns.org`.
+
+Crochet serveur `pocketbase/pb_hooks/versions.pb.js` : rend atomique la vérification de version (sans lui, des enregistrements simultanés s'effacent). Sur Coolify, volume `pocketbase-hooks` monté sur `/app/pb_hooks` ; **pas encore installé sur le serveur**.
+
+## Agent jardinier (Hermes Agent, Telegram)
+
+But : un agent « jardinier » à qui l'utilisateur et Angélique (sa compagne) écrivent sur Telegram (texte, photos de sachets, messages vocaux) ; il lit et tient le potager, conseille (livres de jardinage en EPUB), et prévient de lui-même quand il faut (gel, chaleur, arrosage), plus un point chaque lundi à 8 h.
+
+- Machine : VM `hermes` (SSH `hermes`, Debian 13), Hermes Agent v0.22.5, modèle Gemini 3.7 Flash (lit les images), transcription audio active, Node embarqué dans `~/.hermes/tools/node-*/bin`. Le profil existant « proxmox » ne doit pas être touché : créer un **profil séparé `jardinier`** (sa personnalité, sa mémoire, ses outils, **son propre bot Telegram** que l'utilisateur crée lui-même avec @BotFather et dont il saisit lui-même le jeton).
+- Choix : groupe Telegram « Potager » (l'utilisateur, Angélique, le bot) ; alertes par tâche planifiée en mode surveillance (`hermes cron create --monitor-script`, l'agent n'est réveillé que si une alerte apparaît), pas de message entre 22 h et 7 h ; livres EPUB **uniquement sur la machine hermes**, jamais dans ce dépôt public.
+- Étapes : 1. ✅ boîte à outils MCP `agent/` (voir [agent/LISEZMOI.md](agent/LISEZMOI.md)), testée sur PocketBase local ; 2. script d'alertes + rapport hebdomadaire ; 3. bibliothèque EPUB consultable (outil de recherche dans les passages) ; 4. mise en place sur hermes avec l'utilisateur (profil, compétence « jardinier », compte via `node agent/potager-mcp.mjs inscription` lancé par l'utilisateur, `hermes mcp add`, tâches planifiées, crochet PocketBase).
+- Comptes de test : noms neutres (« Test A »), jamais un prénom.
 
 Sécurité : déconseiller d'exposer le tableau de bord Coolify sur Internet (à gérer en local, `http://IP-locale:8000`) ; seuls PocketBase et l'app doivent être publics.
 

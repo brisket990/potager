@@ -211,6 +211,7 @@ dl.faits dd { margin: 0; font-weight: 500; }
 .cellule { border-color: transparent; background: transparent; width: 100%; padding: 0.25em 0.4em; }
 .cellule:hover, .cellule:focus { border-color: var(--bord); background: #fff; }
 .cellule.num { width: 5em; }
+.cellule.notes { min-width: 12em; }
 .tete-tableau { display: flex; flex-wrap: wrap; gap: 0.6rem; align-items: center; margin-bottom: 0.5rem; }
 .tete-tableau h2 { margin: 0; flex: 1; }
 .statut { font-size: 0.86rem; }
