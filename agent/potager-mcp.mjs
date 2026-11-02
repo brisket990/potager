@@ -68,6 +68,11 @@ async function inscription() {
   };
   console.log("Création du compte du jardinier sur le serveur du potager.\nIl faut un code d'invitation créé dans l'app (Réglages → Compte et potager partagé).\n");
   const serveur = (await question('Adresse du serveur', lireConfig().serveur)).replace(/\/+$/, '');
+  const sante = await fetch(serveur + '/api/health').then((r) => r.json()).catch(() => null);
+  if (!sante || sante.code !== 200) {
+    rl.close();
+    throw new Error(`« ${serveur} » ne répond pas comme un serveur PocketBase (c'est peut-être l'adresse de l'app ?). Relancer et appuyer sur Entrée pour garder l'adresse proposée.`);
+  }
   const code = (await question("Code d'invitation")).toLowerCase().replace(/[^a-z0-9]/g, '');
   const email = await question('E-mail du compte (pas besoin d\'une vraie boîte)', 'jardinier@potager.local');
   const nom = await question('Nom affiché dans l\'app', 'Jardinier');

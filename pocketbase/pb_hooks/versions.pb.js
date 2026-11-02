@@ -13,3 +13,6 @@ onRecordUpdateRequest((e) => {
     e.next()
   })
 }, "jardins")
+
+// Adresse de contrôle : répond seulement si ce crochet est chargé (vérification après installation).
+routerAdd("GET", "/api/potager/crochet", (e) => e.json(200, { versions: true }))

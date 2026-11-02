@@ -36,7 +36,16 @@ Ensuite tout se fait dans l'app : créer le potager, générer un code d'invitat
 
 La règle d'accès vérifie la version, mais pas de façon atomique : deux enregistrements envoyés au même instant avec la même version passeraient tous les deux, et le second effacerait le premier (testé : 21 ajouts perdus sur 48 avec 8 écritures en parallèle ; aucun avec le crochet). Le crochet refait la vérification dans la transaction d'écriture et répond 400 (`data.version = "version_depassee"`) ; l'app et l'agent relisent alors et refusionnent.
 
-Sur Coolify, le service a un volume monté sur `/app/pb_hooks` : y placer le fichier puis redémarrer le service.
+Sur Coolify : ajouter le fichier (Persistent Storage → Files, ou API `POST /services/{uuid}/storages` avec `type: file`, `mount_path: /app/pb_hooks/versions.pb.js`, `content`), **puis le citer dans le Docker Compose du service**, sinon il n'est pas monté (« Service volume mounts are read-only here ») :
+
+```yaml
+    volumes:
+      - 'pocketbase-data:/app/pb_data'
+      - 'pocketbase-hooks:/app/pb_hooks'
+      - './app/pb_hooks/versions.pb.js:/app/pb_hooks/versions.pb.js'
+```
+
+Puis arrêter et redémarrer le service. Vérification : https://pb.xothiques.duckdns.org/api/potager/crochet doit répondre `{"versions":true}`.
 
 ## Mettre à jour un serveur déjà installé
 

@@ -25,7 +25,8 @@ install -D -m 755 "$DEPOT/agent/hermes/alertes.sh" "$P/scripts/potager-alertes.s
 
 echo "5. Outils du potager (serveur MCP)"
 if ! "$HERMES" -p "$PROFIL" mcp list 2>/dev/null | grep -q potager; then
-  "$HERMES" -p "$PROFIL" mcp add potager --command "$HOME/.local/bin/potager-node" --args "$DEPOT/agent/potager-mcp.mjs" </dev/null
+  # Hermes demande s'il faut activer tous les outils trouvés : oui.
+  printf 'y\n' | "$HERMES" -p "$PROFIL" mcp add potager --command "$HOME/.local/bin/potager-node" --args "$DEPOT/agent/potager-mcp.mjs"
 fi
 
 echo "6. Dossier des livres : ~/potager-livres"
