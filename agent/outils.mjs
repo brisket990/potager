@@ -1,6 +1,7 @@
 /* Outils du jardinier : ce que l'agent peut consulter et modifier dans le potager.
  * Chaque outil renvoie un texte en français, lisible par l'agent et facile à reformuler. */
 import { App, U, G, Calendrier, Climat, PLANTES, PLANTES_PAR_ID, FAMILLES, CATEGORIES, saisonCourante } from './noyau.mjs';
+import { meteoAlertes, calculerAlertes, texteAlertes } from './alertes.mjs';
 
 const { fmtDate, fmtDateLongue, aujourdhui, ajouterJours, isoDate, lireIso, normaliser, uid } = U;
 const PP = PLANTES_PAR_ID;
@@ -400,4 +401,45 @@ outil('bilan',
     return [`Bilan ${annee} — ${ent.length} entrée(s) au journal${parType.length ? ` (${parType.join(', ')})` : ''}.`,
       `Récoltes (${+total.toFixed(2)} kg au total) :\n${liste(recoltes, '(aucune récolte notée)')}`,
       `Problèmes notés :\n${liste(problemes, '(aucun)')}`].join('\n');
+  });
+
+// Alertes du moment (aussi utilisées par la surveillance planifiée, voir potager-mcp.mjs « surveiller »).
+export async function alertesDuMoment(pg) {
+  await pg.lire(); await pg.meteo();
+  if (!App.etat.lieu) return [];
+  return calculerAlertes(await meteoAlertes(App.etat.lieu));
+}
+
+outil('alertes',
+  "Alertes des 3 prochains jours : gel, forte chaleur, manque d'eau (pluie moins évaporation sur 7 jours), orage ou grêle. Seulement pour les cultures du plan réellement en terre, en tenant compte des abris. Chaque alerte a un identifiant [type:date].",
+  {}, [], async (pg) => {
+    const l = await alertesDuMoment(pg);
+    return App.etat.lieu ? texteAlertes(l) : "Pas de lieu défini dans l'app : pas d'alertes météo possibles.";
+  });
+
+outil('point_de_la_semaine',
+  "Tout ce qu'il faut pour le point du lundi : à faire dans les 7 jours, météo de la semaine, alertes, graines à acheter pour le plan de la saison, et ce qui a été noté au journal la semaine passée.",
+  {}, [], async (pg) => {
+    const afaire = await OUTILS.find((o) => o.name === 'que_faire').fn(pg, { jours: 7 });
+    const mp = meteoProche();
+    const semaine = mp ? mp.jours.slice(0, 7) : [];
+    const meteoTxt = semaine.length
+      ? `Météo des 7 jours : de ${Math.min(...semaine.map((j) => j.tmin))} à ${Math.max(...semaine.map((j) => j.tmax))} °C, ${+semaine.reduce((s, j) => s + j.pluie, 0).toFixed(1)} mm de pluie au total` +
+        `${mp.gels.length ? `, gel les ${mp.gels.map((j) => fmtDate(lireIso(j.date))).join(', ')}` : ''}${mp.chaleur.length ? `, plus de 30 °C les ${mp.chaleur.map((j) => fmtDate(lireIso(j.date))).join(', ')}` : ''}.`
+      : 'Météo de la semaine indisponible.';
+    const alertes = App.etat.lieu ? texteAlertes(calculerAlertes(await meteoAlertes(App.etat.lieu))) : '(pas de lieu)';
+    // Graines à prévoir : plantes du plan de la saison sans graines (ou plants) en stock, ou avec des graines trop vieilles.
+    const plan = App.etat.plans[saisonCourante()];
+    const besoins = [...new Set((plan ? plan.objets : []).filter((o) => o.t === 'plante' && PP[o.pid]).map((o) => o.pid))].map((id) => {
+      const p = PP[id], stock = App.grainesDe(id);
+      if (!stock.length) return `${p.n} : à acheter (${ACHAT[p.achat || 'graine']})`;
+      if (stock.every((g) => (App.etatGraine(g) || {}).niveau === 'vieille')) return `${p.n} : graines anciennes, faire un test de germination ou racheter`;
+      return null;
+    }).filter(Boolean);
+    const depuis = isoDate(ajouterJours(aujourdhui(), -7));
+    const passe = App.etat.journal.filter((e) => e.date >= depuis).sort((a, b) => a.date.localeCompare(b.date))
+      .map((e) => `${fmtDate(lireIso(e.date))} – ${TYPES_JOURNAL[e.type] || e.type}${e.pid && PP[e.pid] ? ` – ${PP[e.pid].n}` : ''}${e.qte ? ` – ${e.qte} ${e.unite}` : ''}${e.note ? ` – ${e.note}` : ''}${e.par ? ` (par ${e.par})` : ''}`);
+    return [afaire, `\n${meteoTxt}`, `\nAlertes :\n${alertes}`,
+      `\nGraines et plants à prévoir pour le plan ${saisonCourante()} :\n${liste(besoins, plan ? '(tout est en stock)' : '(pas encore de plan pour cette saison)')}`,
+      `\nAu journal ces 7 derniers jours :\n${liste(passe, '(rien de noté)')}`].join('\n');
   });

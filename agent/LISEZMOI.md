@@ -17,6 +17,19 @@ Aucune dépendance : Node.js 20 ou plus suffit.
 | `verifier_plan` | Voisinages et rotations du plan de la saison |
 | `lister_graines` / `ajouter_graines` / `modifier_graine` / `retirer_graine` | Stock de graines, avec les notes du sachet |
 | `noter_journal` / `lire_journal` / `bilan` | Journal (avec auteur et photos) et bilan des récoltes |
+| `alertes` | Gel, forte chaleur, manque d'eau, orage des 3 prochains jours, seulement pour les cultures en terre |
+| `point_de_la_semaine` | Tout pour le point du lundi : à faire, météo, alertes, graines à prévoir, semaine passée |
+
+## Alertes et point du lundi
+
+Calcul dans `alertes.mjs`, sans IA : météo Open-Meteo (7 jours passés, 4 à venir), cultures du plan réellement en terre à la date (calendrier de chaque culture), protection des abris (serre ≈ +3 °C la nuit, tunnel +2, châssis +1).
+
+- Gel : culture « tendre » exposée à 1 °C ou moins (« demi » : −3 °C), sur les deux nuits à venir.
+- Forte chaleur : 30 °C ou plus dans les 3 jours.
+- Manque d'eau : pluie moins évaporation sur 7 jours ≤ −20 mm et moins de 5 mm annoncés ; rappel tous les 3 jours tant que ça dure.
+- Orage (grêle) : dans les 2 jours.
+
+`node agent/potager-mcp.mjs surveiller` affiche les alertes avec un identifiant stable (`[gel:2027-05-12] …`). Dans Hermes, une tâche planifiée en mode surveillance (`--monitor-script`, script `hermes/alertes.sh`, consigne `hermes/consigne-alertes.md`) ne réveille l'agent que si cette sortie change ; l'agent ne prévient que pour les nouveaux identifiants. Rien n'est envoyé la nuit (22 h – 7 h). Le point du lundi est une tâche planifiée classique avec `hermes/consigne-lundi.md`.
 
 Chaque modification relit le potager, l'applique et l'envoie avec la version suivante ; si quelqu'un a enregistré entre-temps, le serveur refuse et l'outil recommence sur l'état à jour (voir `pocketbase/pb_hooks/versions.pb.js`). Les changements apparaissent en direct dans l'app.
 

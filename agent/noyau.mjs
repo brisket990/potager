@@ -10,7 +10,7 @@ process.env.TZ ||= 'Europe/Paris';
 
 const ICI = dirname(fileURLToPath(import.meta.url));
 const JS = join(ICI, '..', 'potager', 'js');
-const CACHE = process.env.POTAGER_CACHE || join(homedir(), '.cache', 'potager-agent');
+export const CACHE = process.env.POTAGER_CACHE || join(homedir(), '.cache', 'potager-agent');
 export const FICHIER_CONFIG = process.env.POTAGER_CONFIG || join(homedir(), '.config', 'potager-agent', 'config.json');
 export const SERVEUR_DEFAUT = 'https://pb.xothiques.duckdns.org';
 const LOCAL = ['annee']; // comme dans synchro.js : la saison affichée est propre à chaque appareil

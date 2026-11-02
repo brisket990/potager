@@ -4,12 +4,16 @@
  *   node agent/potager-mcp.mjs                     serveur MCP (stdio), lancé par l'agent
  *   node agent/potager-mcp.mjs inscription         crée le compte du jardinier avec un code d'invitation
  *   node agent/potager-mcp.mjs outil <nom> [json]  lance un outil à la main (essais, scripts)
+ *   node agent/potager-mcp.mjs surveiller          alertes du moment, pour une tâche planifiée en mode surveillance
  *
  * Aucune dépendance : seulement Node.js 20 ou plus. */
 import { createInterface } from 'node:readline';
 import { randomBytes } from 'node:crypto';
-import { Potager, lireConfig, ecrireConfig, FICHIER_CONFIG } from './noyau.mjs';
-import { OUTILS } from './outils.mjs';
+import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
+import { join } from 'node:path';
+import { Potager, lireConfig, ecrireConfig, FICHIER_CONFIG, CACHE } from './noyau.mjs';
+import { OUTILS, alertesDuMoment } from './outils.mjs';
+import { texteAlertes } from './alertes.mjs';
 
 const VERSION = '1.0.0';
 const CONSIGNES = "Outils du potager familial : l'état réel du jardin (plan, graines, journal), le calendrier et la météo calculés pour son lieu. " +
@@ -82,15 +86,33 @@ async function inscription() {
   console.log(`\n✅ Le jardinier a rejoint le potager « ${inv.nom_jardin || inv.jardin} ».\nConfiguration enregistrée dans ${FICHIER_CONFIG}.\nPense à annuler le code d'invitation dans l'app.`);
 }
 
+// ---------- Surveillance ----------
+// Hermes lance ce script à intervalles réguliers et ne réveille l'agent que si la sortie change.
+// La nuit (22 h – 7 h) ou si le calcul échoue, on répète la sortie précédente : aucun message.
+const CALME = [22, 7];
+async function surveiller() {
+  const fichier = join(CACHE, 'surveillance.txt');
+  let precedente = 'Aucune alerte.';
+  try { precedente = readFileSync(fichier, 'utf8'); } catch { /* premier passage */ }
+  const heure = new Date().getHours();
+  if (heure >= CALME[0] || heure < CALME[1]) { console.log(precedente); return; }
+  let texte;
+  try { texte = texteAlertes(await alertesDuMoment(pg)); } catch (e) { console.error(e.message); console.log(precedente); return; }
+  mkdirSync(CACHE, { recursive: true });
+  writeFileSync(fichier, texte);
+  console.log(texte);
+}
+
 // ---------- Lancement ----------
 const [commande, ...args] = process.argv.slice(2);
 if (!commande) serveurMcp();
 else if (commande === 'inscription') inscription().catch((e) => { console.error('❌ ' + e.message); process.exit(1); });
+else if (commande === 'surveiller') surveiller();
 else if (commande === 'outil') {
   appeler(args[0], args[1] ? JSON.parse(args[1]) : {})
     .then((t) => console.log(t))
     .catch((e) => { console.error('❌ ' + e.message); process.exit(1); });
 } else {
-  console.error('Commandes : (aucune) | inscription | outil <nom> [json]');
+  console.error('Commandes : (aucune) | inscription | outil <nom> [json] | surveiller');
   process.exit(1);
 }
