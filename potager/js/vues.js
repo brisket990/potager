@@ -540,7 +540,7 @@
       const img = h('img', { alt: 'Photo du jardin', loading: 'lazy', onclick: () => App.modal(fmtDateLongue(lireIso(e.date)), h('img', { src: img.src, class: 'photo-grande', alt: 'Photo du jardin' }), true) });
       vignettes.append(img);
       if (urlsPhotos.has(id)) img.src = urlsPhotos.get(id);
-      else U.photos.lire(id).then((b) => { if (b) { const u = URL.createObjectURL(b); urlsPhotos.set(id, u); img.src = u; } });
+      else Synchro.photo(id).then((b) => { if (b) { const u = URL.createObjectURL(b); urlsPhotos.set(id, u); img.src = u; } });
     }
     return h('li', { class: 'entree' },
       h('div', { class: 'entree-tete' },
@@ -551,7 +551,7 @@
         h('span', { class: 'espace' }),
         h('button', { class: 'bouton-icone', 'aria-label': 'Supprimer', title: 'Supprimer', onclick: async () => {
           if (!confirm('Supprimer cette entrée ?')) return;
-          for (const id of e.photos || []) await U.photos.supprimer(id);
+          for (const id of e.photos || []) { await U.photos.supprimer(id); Synchro.supprimerPhoto(id); }
           App.changer((s) => s.journal.splice(s.journal.indexOf(e), 1));
         } }, '🗑️')),
       e.note ? h('p', {}, e.note) : null,
@@ -589,6 +589,7 @@
     const lieu = App.etat.lieu;
     return h('div', { class: 'page' },
       h('div', { class: 'page-tete' }, h('h1', {}, '⚙️ Réglages')),
+      Synchro.carte(),
       h('div', { class: 'deux-blocs' },
         h('section', { class: 'carte' }, h('h2', {}, '📍 Lieu du potager'),
           lieu ? h('p', {}, h('strong', {}, lieu.nom), lieu.detail ? ` – ${lieu.detail}` : '', h('br'), h('span', { class: 'sous' }, `${lieu.lat.toFixed(3)}, ${lieu.lon.toFixed(3)}${App.climat.elev != null ? ` · altitude du point météo ${Math.round(App.climat.elev)} m` : ''}`)) : h('p', { class: 'note' }, 'Aucun lieu défini.'),
@@ -601,14 +602,19 @@
           !App.climat.defaut ? h('p', { class: 'note' }, `Sur ${App.climat.dgAnnees.length} ans : dernière gelée la plus précoce ${fmtDate(U.dateDuJour(2001, Math.max(1, Math.min(...App.climat.dgAnnees))))}, la plus tardive ${fmtDate(U.dateDuJour(2001, Math.max(...App.climat.dgAnnees)))}.`) : null)),
       h('div', { class: 'deux-blocs' },
         h('section', { class: 'carte' }, h('h2', {}, '💾 Sauvegarde'),
-          h('p', { class: 'note' }, "Tes données restent dans ce navigateur, sur cet ordinateur. Exporte-les régulièrement pour ne rien perdre, ou pour les transférer sur un autre appareil."),
+          h('p', { class: 'note' }, Synchro.connecte()
+            ? `Ton potager est enregistré sur le serveur et dans ce navigateur. Une sauvegarde de temps en temps reste une bonne précaution.`
+            : "Tes données restent dans ce navigateur, sur cet ordinateur. Exporte-les régulièrement pour ne rien perdre, ou pour les transférer sur un autre appareil."),
           h('div', { class: 'boutons' },
             h('button', { class: 'bouton primaire', onclick: () => exporter(true) }, '⬇️ Tout exporter (avec photos)'),
             h('button', { class: 'bouton', onclick: () => exporter(false) }, '⬇️ Exporter sans photos'),
             h('label', { class: 'bouton' }, '⬆️ Importer une sauvegarde', h('input', { type: 'file', accept: '.json,application/json', hidden: true, onchange: importer }))),
           h('hr'),
           h('button', { class: 'bouton danger petit', onclick: () => {
-            if (!confirm('Effacer toutes les données (plans, graines, journal) ? Exporte une sauvegarde avant si besoin.')) return;
+            if (!confirm(Synchro.connecte()
+              ? 'Effacer les données de ce navigateur et te déconnecter ? Le potager en ligne n\'est pas touché : tu le retrouveras en te reconnectant.'
+              : 'Effacer toutes les données (plans, graines, journal) ? Exporte une sauvegarde avant si besoin.')) return;
+            Synchro.oublier();
             localStorage.removeItem('potager'); localStorage.removeItem('climat'); localStorage.removeItem('previsions');
             indexedDB.deleteDatabase('potager');
             location.reload();
@@ -624,10 +630,12 @@
     const donnees = { app: 'mon-potager', version: 1, exporte: new Date().toISOString(), etat: App.etat };
     if (avecPhotos) {
       App.toast('Préparation des photos…');
-      const ph = await U.photos.toutes();
       donnees.photos = {};
-      // La carte d'ensoleillement se recalcule : on n'exporte que les photos.
-      for (const [k, b] of Object.entries(ph)) if (b instanceof Blob) donnees.photos[k] = await U.blobVersDataUrl(b);
+      // Les photos du journal, y compris celles ajoutées sur un autre appareil (téléchargées au besoin).
+      for (const k of new Set(App.etat.journal.flatMap((e) => e.photos || []))) {
+        const b = await Synchro.photo(k);
+        if (b instanceof Blob) donnees.photos[k] = await U.blobVersDataUrl(b);
+      }
     }
     U.telecharger(`potager-${isoDate(new Date())}.json`, JSON.stringify(donnees));
   }
@@ -638,7 +646,9 @@
     try {
       const d = JSON.parse(await f.text());
       if (d.app !== 'mon-potager' || !d.etat) throw new Error("ce fichier n'est pas une sauvegarde de Mon potager");
-      if (!confirm('Remplacer les données actuelles par celles de la sauvegarde ?')) return;
+      if (!confirm(Synchro.connecte()
+        ? `Remplacer les données actuelles par celles de la sauvegarde ? Le potager partagé « ${Synchro.nomJardin()} » sera aussi remplacé pour tous ses membres.`
+        : 'Remplacer les données actuelles par celles de la sauvegarde ?')) return;
       for (const [k, u] of Object.entries(d.photos || {})) await U.photos.ecrire(k, await U.dataUrlVersBlob(u));
       App.etat = d.etat;
       App.sauver();

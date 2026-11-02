@@ -13,6 +13,7 @@ Adresse : https://pb.xothiques.duckdns.org (service « pocketbase » du projet �
 
 Règles d'accès :
 - un jardin n'est visible et modifiable que par son propriétaire et ses membres ; personne ne peut en changer le propriétaire ;
+- toute modification d'un jardin doit porter une `version` plus grande que celle du serveur : un envoi basé sur une version dépassée est refusé, et l'app refusionne avant de renvoyer ;
 - seul le propriétaire crée ou supprime les invitations ;
 - on rejoint un jardin en créant sa fiche `membres` avec une invitation valide (non expirée) de ce jardin ;
 - chacun peut quitter un jardin, le propriétaire peut retirer un membre ;
@@ -31,8 +32,15 @@ Règles d'accès :
 
 Ensuite tout se fait dans l'app : créer le potager, générer un code d'invitation, et ta compagne crée son compte avec ce code.
 
-## Parcours prévu dans l'app
+## Mettre à jour un serveur déjà installé
 
+Quand `collections.json` change, le réimporter comme à l'étape 2 (avec « Merge with the existing collections » activé) : « Detected changes » doit montrer seulement des collections modifiées (« Changed »), aucune « Deleted ». Les données ne sont pas touchées.
+
+## Parcours dans l'app (`potager/js/synchro.js`)
+
+- Synchronisation : `jardins.donnees` contient tout l'état de l'app sauf la saison affichée (propre à chaque appareil). Chaque envoi fait `version + 1` ; en cas de modifications des deux côtés, fusion à trois (dernier état commun, cet appareil, serveur), élément par élément pour les listes avec `id`. Les changements des autres arrivent en direct (abonnement temps réel à `jardins/<id>`).
+- Photos : envoyées dans `photos` (`cle` = identifiant de la photo dans le journal), téléchargées à l'affichage sur les autres appareils.
+- Lien d'invitation : `…/#code=<code>` ouvre directement le formulaire d'inscription avec le code.
 - Inscription : `users` créé avec `email`, `password`, `passwordConfirm`, `invitation` = code ; puis connexion ; puis création de la fiche `membres` (`role: "membre"`, `invitation` = code, `jardin` = le jardin de l'invitation).
 - Création d'un potager : `jardins` (`proprietaire` = soi), puis `membres` (`role: "proprietaire"`).
 - Invitation : `invitations` (`jardin`, `nom_jardin`, `cree_par` = soi, `expire` = dans 7 jours) ; le code à transmettre est l'`id` de l'invitation.

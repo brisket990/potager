@@ -26,8 +26,10 @@
     vue: 'maintenant',
   };
 
+  App.etatDefaut = ETAT_DEFAUT;
   App.sauver = () => {
     if (!stock.ecrire('potager', App.etat)) App.toast("Impossible d'enregistrer (stockage plein ?)", true);
+    Synchro.modifie();
   };
   App.changer = (fn, rerendre = true) => { fn(App.etat); App.sauver(); if (rerendre) App.rendre(); };
 
@@ -226,6 +228,7 @@
     const entete = h('header', { class: 'entete' },
       h('div', { class: 'marque' }, h('span', { 'aria-hidden': 'true' }, '🥕'), ' Mon potager'),
       h('div', { class: 'entete-lieu' },
+        Synchro.indicateur(),
         App.etat.lieu
           ? h('button', { class: 'lien', onclick: () => App.aller('reglages') }, '📍 ', App.etat.lieu.nom)
           : h('button', { class: 'bouton petit primaire', onclick: () => App.aller('reglages') }, '📍 Définir mon lieu')));
@@ -244,6 +247,7 @@
     App.majContexte();
     await Terrain.chargerCache();
     App.rendre();
+    Synchro.demarrer();
     if (App.etat.lieu) { await App.chargerMeteo(); App.rendre(); }
   };
 

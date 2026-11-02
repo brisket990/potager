@@ -7,7 +7,7 @@
     "listRule": "@request.auth.id != \"\" && (proprietaire = @request.auth.id || membres_via_jardin.utilisateur ?= @request.auth.id)",
     "viewRule": "@request.auth.id != \"\" && (proprietaire = @request.auth.id || membres_via_jardin.utilisateur ?= @request.auth.id)",
     "createRule": "@request.auth.id != \"\" && proprietaire = @request.auth.id",
-    "updateRule": "@request.auth.id != \"\" && (proprietaire = @request.auth.id || membres_via_jardin.utilisateur ?= @request.auth.id) && (@request.body.proprietaire:isset = false || @request.body.proprietaire = proprietaire)",
+    "updateRule": "@request.auth.id != \"\" && (proprietaire = @request.auth.id || membres_via_jardin.utilisateur ?= @request.auth.id) && (@request.body.proprietaire:isset = false || @request.body.proprietaire = proprietaire) && @request.body.version > version",
     "deleteRule": "@request.auth.id != \"\" && proprietaire = @request.auth.id",
     "fields": [
       { "id": "text_id_jardins", "name": "id", "type": "text", "system": true, "primaryKey": true, "required": true, "min": 15, "max": 15, "pattern": "^[a-z0-9]+$", "autogeneratePattern": "[a-z0-9]{15}", "hidden": false, "presentable": false },
