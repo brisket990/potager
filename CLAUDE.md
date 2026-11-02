@@ -50,9 +50,9 @@ Objectif : se connecter avec un compte, retrouver le potager de n'importe où, l
 
 Solution retenue : **PocketBase auto-hébergé sur Coolify** (service en un clic), plutôt que Supabase (trop lourd en auto-hébergé) ou un service en ligne.
 
-1. L'utilisateur déploie PocketBase sur Coolify avec le domaine `https://pb.xothiques.duckdns.org` et crée lui-même le compte administrateur (ne jamais lui demander ce mot de passe).
-2. Préparer un fichier de collections PocketBase à importer : `jardins` (nom, propriétaire, données), membres / invitations par code, photos du journal ; règles d'accès limitées aux membres du jardin.
-3. Dans l'app : écran de connexion (e-mail + mot de passe), création du potager, invitation par code, synchronisation en temps réel avec copie locale hors ligne, import des données locales existantes.
+1. ✅ PocketBase déployé sur Coolify (projet « Potager », service « pocketbase ») : `https://pb.xothiques.duckdns.org`. Claude pilote Coolify par son API avec le jeton de la variable d'environnement `COOLIFY_TOKEN` (ne jamais l'afficher ni le commiter). L'utilisateur crée lui-même le compte administrateur (ne jamais lui demander ce mot de passe).
+2. Fichier de collections prêt : [pocketbase/collections.json](pocketbase/collections.json), mise en place et parcours décrits dans [pocketbase/LISEZMOI.md](pocketbase/LISEZMOI.md). Testé le 2026-11-02 sur un PocketBase 0.40.6 local jetable (import, inscription par code, accès membres / inconnu, photos protégées : tout passe). Pas encore importé sur le serveur.
+3. Dans l'app : écran de connexion (e-mail + mot de passe), **création de compte dans l'app uniquement avec un code d'invitation** (choix de l'utilisateur ; le tout premier compte est créé dans le tableau de bord), création du potager, invitation par code, synchronisation en temps réel avec copie locale hors ligne, import des données locales existantes.
 4. Servir l'app en site statique (Coolify depuis ce dépôt, ou GitHub Pages) : `https://potager.xothiques.duckdns.org`.
 
 Sécurité : déconseiller d'exposer le tableau de bord Coolify sur Internet (à gérer en local, `http://IP-locale:8000`) ; seuls PocketBase et l'app doivent être publics.

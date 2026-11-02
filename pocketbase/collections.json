@@ -1,0 +1,92 @@
+[
+  {
+    "id": "pbc_jardins",
+    "name": "jardins",
+    "type": "base",
+    "system": false,
+    "listRule": "@request.auth.id != \"\" && (proprietaire = @request.auth.id || membres_via_jardin.utilisateur ?= @request.auth.id)",
+    "viewRule": "@request.auth.id != \"\" && (proprietaire = @request.auth.id || membres_via_jardin.utilisateur ?= @request.auth.id)",
+    "createRule": "@request.auth.id != \"\" && proprietaire = @request.auth.id",
+    "updateRule": "@request.auth.id != \"\" && (proprietaire = @request.auth.id || membres_via_jardin.utilisateur ?= @request.auth.id) && (@request.body.proprietaire:isset = false || @request.body.proprietaire = proprietaire)",
+    "deleteRule": "@request.auth.id != \"\" && proprietaire = @request.auth.id",
+    "fields": [
+      { "id": "text_id_jardins", "name": "id", "type": "text", "system": true, "primaryKey": true, "required": true, "min": 15, "max": 15, "pattern": "^[a-z0-9]+$", "autogeneratePattern": "[a-z0-9]{15}", "hidden": false, "presentable": false },
+      { "id": "text_nom_jardins", "name": "nom", "type": "text", "system": false, "required": true, "min": 1, "max": 80, "pattern": "", "autogeneratePattern": "", "primaryKey": false, "hidden": false, "presentable": true },
+      { "id": "rel_prop_jardins", "name": "proprietaire", "type": "relation", "system": false, "required": true, "collectionId": "_pb_users_auth_", "cascadeDelete": false, "minSelect": 0, "maxSelect": 1, "hidden": false, "presentable": false },
+      { "id": "json_don_jardins", "name": "donnees", "type": "json", "system": false, "required": false, "maxSize": 5242880, "hidden": false, "presentable": false },
+      { "id": "num_vers_jardins", "name": "version", "type": "number", "system": false, "required": false, "onlyInt": true, "min": 0, "max": null, "hidden": false, "presentable": false },
+      { "id": "rel_modi_jardins", "name": "modifie_par", "type": "relation", "system": false, "required": false, "collectionId": "_pb_users_auth_", "cascadeDelete": false, "minSelect": 0, "maxSelect": 1, "hidden": false, "presentable": false },
+      { "id": "auto_crea_jardin", "name": "created", "type": "autodate", "system": false, "onCreate": true, "onUpdate": false, "hidden": false, "presentable": false },
+      { "id": "auto_maj_jardins", "name": "updated", "type": "autodate", "system": false, "onCreate": true, "onUpdate": true, "hidden": false, "presentable": false }
+    ],
+    "indexes": []
+  },
+  {
+    "id": "pbc_invitations",
+    "name": "invitations",
+    "type": "base",
+    "system": false,
+    "listRule": "@request.auth.id != \"\" && (jardin.proprietaire = @request.auth.id || jardin.membres_via_jardin.utilisateur ?= @request.auth.id)",
+    "viewRule": "@request.auth.id != \"\"",
+    "createRule": "@request.auth.id != \"\" && cree_par = @request.auth.id && jardin.proprietaire = @request.auth.id",
+    "updateRule": null,
+    "deleteRule": "@request.auth.id != \"\" && jardin.proprietaire = @request.auth.id",
+    "fields": [
+      { "id": "text_id_invitati", "name": "id", "type": "text", "system": true, "primaryKey": true, "required": true, "min": 15, "max": 15, "pattern": "^[a-z0-9]+$", "autogeneratePattern": "[a-z0-9]{15}", "hidden": false, "presentable": false },
+      { "id": "rel_jard_invitat", "name": "jardin", "type": "relation", "system": false, "required": true, "collectionId": "pbc_jardins", "cascadeDelete": true, "minSelect": 0, "maxSelect": 1, "hidden": false, "presentable": false },
+      { "id": "text_nomj_invita", "name": "nom_jardin", "type": "text", "system": false, "required": false, "min": 0, "max": 80, "pattern": "", "autogeneratePattern": "", "primaryKey": false, "hidden": false, "presentable": true },
+      { "id": "rel_crea_invitat", "name": "cree_par", "type": "relation", "system": false, "required": true, "collectionId": "_pb_users_auth_", "cascadeDelete": true, "minSelect": 0, "maxSelect": 1, "hidden": false, "presentable": false },
+      { "id": "date_exp_invitat", "name": "expire", "type": "date", "system": false, "required": true, "min": "", "max": "", "hidden": false, "presentable": false },
+      { "id": "auto_crea_invita", "name": "created", "type": "autodate", "system": false, "onCreate": true, "onUpdate": false, "hidden": false, "presentable": false },
+      { "id": "auto_maj_invitat", "name": "updated", "type": "autodate", "system": false, "onCreate": true, "onUpdate": true, "hidden": false, "presentable": false }
+    ],
+    "indexes": []
+  },
+  {
+    "id": "pbc_membres",
+    "name": "membres",
+    "type": "base",
+    "system": false,
+    "listRule": "@request.auth.id != \"\" && (jardin.proprietaire = @request.auth.id || jardin.membres_via_jardin.utilisateur ?= @request.auth.id)",
+    "viewRule": "@request.auth.id != \"\" && (jardin.proprietaire = @request.auth.id || jardin.membres_via_jardin.utilisateur ?= @request.auth.id)",
+    "createRule": "@request.auth.id != \"\" && utilisateur = @request.auth.id && ((role = \"proprietaire\" && jardin.proprietaire = @request.auth.id) || (role = \"membre\" && invitation.jardin = jardin && invitation.expire > @now))",
+    "updateRule": "@request.auth.id != \"\" && utilisateur = @request.auth.id && @request.body.jardin:isset = false && @request.body.utilisateur:isset = false && @request.body.role:isset = false && @request.body.invitation:isset = false",
+    "deleteRule": "@request.auth.id != \"\" && (utilisateur = @request.auth.id || jardin.proprietaire = @request.auth.id)",
+    "fields": [
+      { "id": "text_id_membres0", "name": "id", "type": "text", "system": true, "primaryKey": true, "required": true, "min": 15, "max": 15, "pattern": "^[a-z0-9]+$", "autogeneratePattern": "[a-z0-9]{15}", "hidden": false, "presentable": false },
+      { "id": "rel_jard_membres", "name": "jardin", "type": "relation", "system": false, "required": true, "collectionId": "pbc_jardins", "cascadeDelete": true, "minSelect": 0, "maxSelect": 1, "hidden": false, "presentable": false },
+      { "id": "rel_util_membres", "name": "utilisateur", "type": "relation", "system": false, "required": true, "collectionId": "_pb_users_auth_", "cascadeDelete": true, "minSelect": 0, "maxSelect": 1, "hidden": false, "presentable": false },
+      { "id": "text_nom_membres", "name": "nom", "type": "text", "system": false, "required": false, "min": 0, "max": 60, "pattern": "", "autogeneratePattern": "", "primaryKey": false, "hidden": false, "presentable": true },
+      { "id": "sel_role_membres", "name": "role", "type": "select", "system": false, "required": true, "values": ["proprietaire", "membre"], "maxSelect": 1, "hidden": false, "presentable": false },
+      { "id": "rel_invi_membres", "name": "invitation", "type": "relation", "system": false, "required": false, "collectionId": "pbc_invitations", "cascadeDelete": false, "minSelect": 0, "maxSelect": 1, "hidden": false, "presentable": false },
+      { "id": "auto_crea_membre", "name": "created", "type": "autodate", "system": false, "onCreate": true, "onUpdate": false, "hidden": false, "presentable": false },
+      { "id": "auto_maj_membres", "name": "updated", "type": "autodate", "system": false, "onCreate": true, "onUpdate": true, "hidden": false, "presentable": false }
+    ],
+    "indexes": [
+      "CREATE UNIQUE INDEX `idx_membres_jardin_utilisateur` ON `membres` (`jardin`, `utilisateur`)"
+    ]
+  },
+  {
+    "id": "pbc_photos",
+    "name": "photos",
+    "type": "base",
+    "system": false,
+    "listRule": "@request.auth.id != \"\" && (jardin.proprietaire = @request.auth.id || jardin.membres_via_jardin.utilisateur ?= @request.auth.id)",
+    "viewRule": "@request.auth.id != \"\" && (jardin.proprietaire = @request.auth.id || jardin.membres_via_jardin.utilisateur ?= @request.auth.id)",
+    "createRule": "@request.auth.id != \"\" && ajoute_par = @request.auth.id && (jardin.proprietaire = @request.auth.id || jardin.membres_via_jardin.utilisateur ?= @request.auth.id)",
+    "updateRule": "@request.auth.id != \"\" && (jardin.proprietaire = @request.auth.id || jardin.membres_via_jardin.utilisateur ?= @request.auth.id) && @request.body.jardin:isset = false",
+    "deleteRule": "@request.auth.id != \"\" && (jardin.proprietaire = @request.auth.id || jardin.membres_via_jardin.utilisateur ?= @request.auth.id)",
+    "fields": [
+      { "id": "text_id_photos00", "name": "id", "type": "text", "system": true, "primaryKey": true, "required": true, "min": 15, "max": 15, "pattern": "^[a-z0-9]+$", "autogeneratePattern": "[a-z0-9]{15}", "hidden": false, "presentable": false },
+      { "id": "rel_jard_photos0", "name": "jardin", "type": "relation", "system": false, "required": true, "collectionId": "pbc_jardins", "cascadeDelete": true, "minSelect": 0, "maxSelect": 1, "hidden": false, "presentable": false },
+      { "id": "text_cle_photos0", "name": "cle", "type": "text", "system": false, "required": true, "min": 1, "max": 40, "pattern": "", "autogeneratePattern": "", "primaryKey": false, "hidden": false, "presentable": true },
+      { "id": "file_fich_photos", "name": "fichier", "type": "file", "system": false, "required": true, "maxSelect": 1, "maxSize": 10485760, "mimeTypes": ["image/jpeg", "image/png", "image/webp"], "thumbs": ["400x0"], "protected": true, "hidden": false, "presentable": false },
+      { "id": "rel_ajou_photos0", "name": "ajoute_par", "type": "relation", "system": false, "required": false, "collectionId": "_pb_users_auth_", "cascadeDelete": false, "minSelect": 0, "maxSelect": 1, "hidden": false, "presentable": false },
+      { "id": "auto_crea_photos", "name": "created", "type": "autodate", "system": false, "onCreate": true, "onUpdate": false, "hidden": false, "presentable": false },
+      { "id": "auto_maj_photos0", "name": "updated", "type": "autodate", "system": false, "onCreate": true, "onUpdate": true, "hidden": false, "presentable": false }
+    ],
+    "indexes": [
+      "CREATE UNIQUE INDEX `idx_photos_jardin_cle` ON `photos` (`jardin`, `cle`)"
+    ]
+  }
+]
