@@ -197,7 +197,7 @@
   }
 
   function choisirOutil(outil, pid = null) {
-    ed.outil = outil; ed.pid = pid;
+    ed.outil = outil; ed.pid = pid; ed.enSerie = false;
     if (outil !== 'select') ed.sel = null;
     rendrePalette(); rendrePanneau(); dessiner();
     const aide = svg.parentNode && svg.parentNode.querySelector('.aide-plan');
@@ -640,7 +640,8 @@
       objets().push(o);
       ed.sel = o.id;
       // Retour à la sélection (pour déplacer le plan ou l'objet posé) ; Maj enfoncée : on garde la plante pour en poser d'autres.
-      if (ed.outil !== 'plante' || !(e && e.shiftKey)) { ed.outil = 'select'; ed.pid = null; rendrePalette(); svg.style.cursor = 'default'; }
+      ed.enSerie = ed.outil === 'plante' && !!(e && e.shiftKey);
+      if (!ed.enSerie) { ed.outil = 'select'; ed.pid = null; rendrePalette(); svg.style.cursor = 'default'; }
       enregistrer();
       rendrePanneau();
       const aide = svg.parentNode.querySelector('.aide-plan');
@@ -657,6 +658,12 @@
     zoomer(e.deltaY < 0 ? 1.15 : 1 / 1.15, e.clientX - r.left, e.clientY - r.top);
   }
 
+  // Plantes posées en série avec Maj : lâcher Maj rend la main à la sélection.
+  document.addEventListener('keyup', (e) => {
+    if (e.key !== 'Shift' || !ed.enSerie || App.vue !== 'plan') return;
+    ed.enSerie = false;
+    if (ed.outil === 'plante' && !geste) choisirOutil('select');
+  });
   document.addEventListener('keydown', (e) => {
     if (App.vue !== 'plan' || /INPUT|SELECT|TEXTAREA/.test(document.activeElement.tagName) || document.querySelector('.modal-fond')) return;
     const o = ed.sel && trouver(ed.sel);
