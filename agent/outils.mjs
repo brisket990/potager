@@ -82,16 +82,31 @@ function tachesPlan(debut, fin) {
   const ordre = { si: 0, sd: 1, sa: 1, pl: 2, rec: 3 };
   return res.sort((a, b) => ordre[a.s.type] - ordre[b.s.type] || a.s.debut - b.s.debut);
 }
-function statutSemis(p) {
-  const ajd = aujourdhui();
-  const segs = Calendrier.actions(p, App.ctx, ajd, ajouterJours(ajd, 365))
-    .filter((s) => SEMIS.has(s.type) || (s.type === 'pl' && (p.achat || 'graine') !== 'graine'))
+// Comme dans l'app : les dates retenues pour la graine si elle en a, sinon le calcul de l'app.
+function statutSemis(p, g) {
+  const ajd = aujourdhui(), fin = ajouterJours(ajd, 365);
+  const segs = (g && g.periodes && g.periodes.length
+    ? App.periodesGraine(g, ajd, fin).filter((s) => s.type !== 'rec')
+    : Calendrier.actions(p, App.ctx, ajd, fin).filter((s) => SEMIS.has(s.type) || (s.type === 'pl' && (p.achat || 'graine') !== 'graine')))
     .sort((a, b) => a.debut - b.debut);
   return { maintenant: segs.filter((s) => s.debut <= ajouterJours(ajd, 14) && s.fin >= ajd), prochain: segs.find((s) => s.debut > ajouterJours(ajd, 14)) };
 }
 const texteStatut = (p, st) => (st.maintenant.length
   ? st.maintenant.map((s) => `${Calendrier.libelle(s.type, p).toLowerCase()} maintenant (jusqu'au ${fmtDate(s.fin)})`).join(', ')
   : st.prochain ? `${Calendrier.libelle(st.prochain.type, p).toLowerCase()} à partir du ${fmtDate(st.prochain.debut)}` : 'pas de fenêtre de semis chez toi');
+const avecPeriodes = (g) => !!(g.periodes && g.periodes.length);
+const jourMois = (mmjj) => { const [m, j] = mmjj.split('-').map(Number); return `${j}/${String(m).padStart(2, '0')}`; };
+const textePeriodes = (g, p) => g.periodes.map((x) => `${x.type === 'rec' && !PP[g.pid] ? 'récolte ou floraison' : Calendrier.libelle(x.type, p).toLowerCase()} du ${jourMois(x.du)} au ${jourMois(x.au)}`).join(', ');
+function lirePeriodes(l) {
+  if (l == null) return l;
+  return l.map((x) => {
+    const ok = Calendrier.TYPES[x.type] && [x.du, x.au].every((d) => /^\d{2}-\d{2}$/.test(d || '') && !isNaN(new Date(`2001-${d}`)));
+    if (!ok) throw new Error(`Période invalide : ${JSON.stringify(x)}. Attendu { type: si|sd|pl|rec, du: "MM-JJ", au: "MM-JJ" }.`);
+    return { type: x.type, du: x.du, au: x.au };
+  });
+}
+const PERIODES = { type: 'array', description: "Dates retenues pour ce sachet à Drancy (ou au lieu du potager), après comparaison du sachet avec le calendrier de l'app et d'autres sources. Elles remplacent le calcul de l'app pour cette graine. Types : si = semis à l'abri, sd = semis en place, pl = plantation / mise en place, rec = récolte ou floraison. Dates « MM-JJ », sans année (une période peut passer le 31 décembre).",
+  items: { type: 'object', properties: { type: { type: 'string', enum: ['si', 'sd', 'pl', 'rec'] }, du: { type: 'string', pattern: '^\\d{2}-\\d{2}$' }, au: { type: 'string', pattern: '^\\d{2}-\\d{2}$' } }, required: ['type', 'du', 'au'] } };
 
 function datesGel() {
   const an = new Date().getFullYear();
@@ -165,10 +180,12 @@ outil('que_faire',
       return `${Calendrier.libelle(s.type, p)} – ${p.n}${decal ? ' (sous abri)' : ''} : ${quand}${nb ? `, ${nb} plant(s) prévus` : ''}${conseil ? ` — ${conseil}` : ''}`;
     });
     const dansPlan = new Set(tachesPlan(ajd, fin).map((t) => t.p.id));
-    const stock = [...new Map(App.etat.graines.filter((g) => PP[g.pid] && !dansPlan.has(g.pid)).map((g) => [g.pid, g])).values()]
-      .map((g) => ({ g, p: PP[g.pid], st: statutSemis(PP[g.pid]) }))
+    // Une ligne par plante du catalogue, et une par graine qui a ses propres dates.
+    const stock = [...new Map(App.etat.graines.filter((g) => avecPeriodes(g) || (PP[g.pid] && !dansPlan.has(g.pid)))
+      .map((g) => [avecPeriodes(g) ? g.id : g.pid, g])).values()]
+      .map((g) => { const p = App.planteGraine(g); return { g, p, st: statutSemis(p, g) }; })
       .filter((x) => x.st.maintenant.length)
-      .map(({ g, p, st }) => `${p.n}${g.variete ? ` (${g.variete})` : ''} : ${texteStatut(p, st)}${conseilsMeteo(p, st.maintenant[0].type, mp) ? ` — ${conseilsMeteo(p, st.maintenant[0].type, mp)}` : ''}`);
+      .map(({ g, p, st }) => `${p.n}${g.variete ? ` (${g.variete})` : ''} : ${texteStatut(p, st)}${avecPeriodes(g) ? ' (dates retenues pour ce sachet)' : ''}${conseilsMeteo(p, st.maintenant[0].type, mp) ? ` — ${conseilsMeteo(p, st.maintenant[0].type, mp)}` : ''}`);
     const lignes = [`Du ${fmtDate(ajd)} au ${fmtDate(fin)} :`, `\nCultures du plan :\n${liste(taches, '(rien de prévu dans le plan sur cette période)')}`,
       `\nGraines du stock (hors plan) à semer maintenant :\n${liste(stock, '(aucune)')}`];
     if (mp) {
@@ -277,59 +294,72 @@ outil('lister_graines',
     const l = App.etat.graines
       .filter((g) => !f || normaliser(`${(PP[g.pid] || {}).n || ''} ${g.variete || ''} ${g.texte || ''}`).includes(f))
       .map((g) => {
-        const p = PP[g.pid];
+        const p = PP[g.pid], plante = App.planteGraine(g);
         const eg = App.etatGraine(g);
-        return `${p ? p.n : `❓ non reconnue (« ${g.texte || ''} »)`}${g.variete ? ` – ${g.variete}` : ''}${g.annee ? ` – ${g.annee}` : ''}${g.quantite ? ` – ${g.quantite}` : ''}` +
-          (g.notes ? ` – notes : ${g.notes}` : '') + (eg ? ` – ${eg.texte}` : '') + (p ? ` – ${texteStatut(p, statutSemis(p))}` : '') + ` [id ${g.id}]`;
+        return `${p ? p.n : `${g.texte || '?'} (hors catalogue de l'app)`}${g.variete ? ` – ${g.variete}` : ''}${g.annee ? ` – ${g.annee}` : ''}${g.quantite ? ` – ${g.quantite}` : ''}` +
+          (g.notes ? ` – notes : ${g.notes}` : '') + (eg ? ` – ${eg.texte}` : '') +
+          (avecPeriodes(g) ? ` – dates retenues : ${textePeriodes(g, plante)}` : '') +
+          (p || avecPeriodes(g) ? ` – ${texteStatut(plante, statutSemis(plante, g))}` : ' – pas de dates : se fier au sachet') + ` [id ${g.id}]`;
       });
     return `${l.length} graine(s)${f ? ` correspondant à « ${filtre} »` : ''} :\n${liste(l, '(aucune)')}`;
   });
 
 outil('ajouter_graines',
-  "Ajoute des graines au stock (par exemple après avoir lu des photos de sachets). Pour chaque sachet, donner la plante et si possible la variété, l'année (date limite ou année de récolte du sachet), la quantité et les indications utiles du sachet. Si un sachet identique existe déjà (même plante, variété et année), il est mis à jour au lieu d'être doublé. Les plantes inconnues de l'app ne sont pas ajoutées : elles sont signalées pour en parler avec l'utilisateur.",
+  "Ajoute des graines au stock (par exemple après avoir lu des photos de sachets). Pour chaque sachet, donner la plante et si possible la variété, l'année (date limite ou année de récolte du sachet), la quantité et les indications utiles du sachet. Si un sachet identique existe déjà (même plante, variété et année), il est mis à jour au lieu d'être doublé. Une plante absente du catalogue de l'app (fleur d'ornement, plante rare…) est quand même ajoutée sous son nom, sans calendrier ni durée de germination. `periodes` : les dates retenues avec l'utilisateur pour ce sachet (après comparaison du sachet, de fiche_plante et de recherches), qui remplacent le calcul de l'app.",
   { graines: { type: 'array', minItems: 1, items: { type: 'object', properties: {
     plante: { type: 'string', description: 'Nom de la plante (ex. « Tomate », « Haricot nain »).' },
     variete: { type: 'string' },
     annee: { type: 'integer', description: 'Année du sachet (récolte ou date limite).' },
     quantite: { type: 'string', description: 'Ex. « 1 sachet », « 50 graines », « 2 g ».' },
     notes: { type: 'string', description: 'Indications du sachet utiles plus tard : période de semis, profondeur, particularités.' },
+    periodes: PERIODES,
   }, required: ['plante'] } } }, ['graines'],
   async (pg, { graines }) => {
+    for (const s of graines) s.periodes = lirePeriodes(s.periodes);
     const res = await pg.modifier((etat) => {
-      const ajoutees = [], majs = [], inconnues = [];
+      const ajoutees = [], majs = [], horsCatalogue = [];
       for (const s of graines) {
         const p = trouverPlante(s.plante) || trouverPlante(`${s.plante} ${s.variete || ''}`);
-        if (!p) { inconnues.push(s.plante); continue; }
+        // Hors catalogue : gardée sous son nom (`texte`), comme une ligne non reconnue de l'import de l'app.
+        const texte = p ? undefined : s.plante.trim();
+        const nom = p ? p.n : texte;
         const variete = (s.variete || '').trim();
-        const existante = etat.graines.find((g) => g.pid === p.id && normaliser(g.variete || '') === normaliser(variete) && (g.annee || null) === (s.annee || null));
+        const existante = etat.graines.find((g) => (p ? g.pid === p.id : !PP[g.pid] && normaliser(g.texte || '') === normaliser(texte)) &&
+          normaliser(g.variete || '') === normaliser(variete) && (g.annee || null) === (s.annee || null));
         if (existante) {
           if (s.quantite) existante.quantite = s.quantite;
           if (s.notes) existante.notes = s.notes;
-          majs.push(`${p.n}${variete ? ` ${variete}` : ''}`);
+          if (s.periodes && s.periodes.length) existante.periodes = s.periodes;
+          majs.push(`${nom}${variete ? ` ${variete}` : ''}`);
         } else {
-          const g = { id: uid(), pid: p.id, variete, annee: s.annee || null, quantite: s.quantite || '' };
+          const g = p ? { id: uid(), pid: p.id } : { id: uid(), pid: null, texte };
+          Object.assign(g, { variete, annee: s.annee || null, quantite: s.quantite || '' });
           if (s.notes) g.notes = s.notes;
+          if (s.periodes && s.periodes.length) g.periodes = s.periodes;
           etat.graines.push(g);
-          ajoutees.push(`${p.n}${variete ? ` ${variete}` : ''}${s.annee ? ` ${s.annee}` : ''} [id ${g.id}]`);
+          ajoutees.push(`${nom}${variete ? ` ${variete}` : ''}${s.annee ? ` ${s.annee}` : ''} [id ${g.id}]`);
+          if (!p) horsCatalogue.push(nom);
         }
       }
-      return { ajoutees, majs, inconnues };
+      return { ajoutees, majs, horsCatalogue };
     });
     return [`Ajoutées (${res.ajoutees.length}) :\n${liste(res.ajoutees, '(aucune)')}`,
       res.majs.length ? `Déjà en stock, mises à jour : ${res.majs.join(', ')}` : null,
-      res.inconnues.length ? `Non ajoutées, plantes inconnues de l'app : ${res.inconnues.join(', ')} (vérifier avec chercher_plante ou demander à l'utilisateur).` : null].filter(Boolean).join('\n');
+      res.horsCatalogue.length ? `Hors catalogue de l'app (ajoutées sous leur nom, sans calendrier ni suivi de germination ; se fier au sachet) : ${res.horsCatalogue.join(', ')}.` : null].filter(Boolean).join('\n');
   });
 
 outil('modifier_graine',
-  "Corrige une graine du stock (id donné par lister_graines) : plante, variété, année, quantité ou notes. Ne donner que les champs à changer.",
-  { id: { type: 'string' }, plante: { type: 'string' }, variete: { type: 'string' }, annee: { type: ['integer', 'null'] }, quantite: { type: 'string' }, notes: { type: 'string' } }, ['id'],
+  "Corrige une graine du stock (id donné par lister_graines) : plante, variété, année, quantité, notes ou dates retenues (periodes ; [] ou null pour revenir au calcul de l'app). Ne donner que les champs à changer.",
+  { id: { type: 'string' }, plante: { type: 'string' }, variete: { type: 'string' }, annee: { type: ['integer', 'null'] }, quantite: { type: 'string' }, notes: { type: 'string' }, periodes: { ...PERIODES, type: ['array', 'null'] } }, ['id'],
   async (pg, { id, plante, ...champs }) => {
     const p = plante ? exigePlante(plante) : null;
+    const periodes = lirePeriodes(champs.periodes);
     return pg.modifier((etat) => {
       const g = etat.graines.find((x) => x.id === id);
       if (!g) throw new Error(`Aucune graine avec l'id ${id}.`);
-      if (p) g.pid = p.id;
+      if (p) { g.pid = p.id; delete g.texte; }
       for (const k of ['variete', 'annee', 'quantite', 'notes']) if (champs[k] !== undefined) g[k] = champs[k];
+      if (periodes !== undefined) { if (periodes && periodes.length) g.periodes = periodes; else delete g.periodes; }
       return `Graine mise à jour : ${(PP[g.pid] || {}).n || g.texte}${g.variete ? ` ${g.variete}` : ''}${g.annee ? ` ${g.annee}` : ''}.`;
     });
   });

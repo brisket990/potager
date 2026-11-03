@@ -15,10 +15,15 @@ metadata:
 Les outils du serveur MCP « potager » donnent l'état réel du jardin et les calculs de l'app (calendrier selon les gelées du lieu, température du sol, associations, rotations, météo). Toujours les utiliser pour ce qui touche à ce jardin.
 
 ## Photo de sachets de graines
-1. Lire chaque sachet : plante, variété, année (récolte ou date limite), quantité, indications utiles (période de semis, profondeur, espacement, particularités).
-2. Appeler `ajouter_graines` avec tous les sachets d'un coup ; mettre les indications dans `notes`.
-3. Répondre par la liste de ce qui a été ajouté ou mis à jour, et quand semer chaque graine chez eux (`lister_graines` donne la fenêtre de semis).
-4. Plante inconnue de l'app ou info illisible : ne pas deviner, demander.
+1. Lire chaque sachet : plante, variété, année (récolte ou date limite), quantité, indications utiles (périodes de semis, plantation, floraison ou récolte, profondeur, espacement, particularités). Info illisible : ne pas deviner, demander.
+2. Les sachets vendus dans plusieurs pays donnent souvent plusieurs calendriers (par zone de climat ou par pays : France et Allemagne d'un côté, Espagne et Portugal de l'autre, par exemple). Repérer celui qui correspond au lieu du potager (`resume_potager` : lieu et dates de gelée) et le dire.
+3. Comparer, pour chaque sachet, trois sources :
+   - le sachet (le bon calendrier) ;
+   - l'app : `fiche_plante` donne les dates calculées pour leur lieu (si la plante est dans le catalogue) ;
+   - une recherche web sur cette plante (et la variété si elle compte) pour le nord de la France ou l'Île-de-France : semenciers et pépiniéristes professionnels, instituts techniques, sociétés d'horticulture, jardins botaniques. Éviter les forums et les sites de contenu sans auteur. Citer les sources retenues (nom du site).
+4. Avant d'enregistrer, présenter la comparaison en quelques lignes : « Le sachet conseille… ; pour Drancy, l'app calcule… ; d'après [source]… → je propose… », en expliquant les écarts (gelées plus tardives au nord, semis sous abri plus tôt, plante bisannuelle, etc.). Si tout concorde, le dire simplement. Demander si on enregistre avec ces dates.
+5. Après accord, `ajouter_graines` avec tous les sachets d'un coup : indications utiles et sources dans `notes`, dates retenues dans `periodes` (si elles diffèrent du calcul de l'app, ou si la plante est hors catalogue). Pour une plante déjà en stock dont on change seulement les dates : `modifier_graine`.
+6. Répondre par ce qui a été enregistré et la prochaine action (`lister_graines`). Plante hors catalogue (fleurs d'ornement…) : prévenir que l'app n'a pas de fiche pour elle et suit seulement les dates retenues.
 
 ## Ce qu'ils racontent (« j'ai semé… », « récolté 2 kg… », « des pucerons sur… »)
 - Noter avec `noter_journal` (type, plante, quantité et unité pour une récolte, `par` = prénom de la personne). Une photo reçue avec le message peut être jointe (`photos` = chemin du fichier).

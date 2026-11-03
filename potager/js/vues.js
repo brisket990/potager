@@ -56,11 +56,12 @@
     return res.sort((a, b) => ordre[a.s.type] - ordre[b.s.type] || a.s.debut - b.s.debut);
   }
 
-  // Prochaine action de semis/plantation pour une graine.
-  function statutSemis(p) {
-    const ajd = aujourdhui();
-    const segs = Calendrier.actions(p, App.ctx, ajd, ajouterJours(ajd, 365))
-      .filter((s) => SEMIS.has(s.type) || (s.type === 'pl' && (p.achat || 'graine') !== 'graine'))
+  // Prochaine action de semis/plantation pour une graine (ses dates retenues si elle en a, sinon le calcul de l'app).
+  function statutSemis(p, g) {
+    const ajd = aujourdhui(), fin = ajouterJours(ajd, 365);
+    const segs = (g && g.periodes && g.periodes.length
+      ? App.periodesGraine(g, ajd, fin).filter((s) => s.type !== 'rec')
+      : Calendrier.actions(p, App.ctx, ajd, fin).filter((s) => SEMIS.has(s.type) || (s.type === 'pl' && (p.achat || 'graine') !== 'graine')))
       .sort((a, b) => a.debut - b.debut);
     const maintenant = segs.filter((s) => s.debut <= ajouterJours(ajd, 14) && s.fin >= ajd);
     const prochain = segs.find((s) => s.debut > ajouterJours(ajd, 14));
@@ -186,12 +187,16 @@
           : h('span', {}, 'Ton plan est vide. ', h('button', { class: 'lien', onclick: () => App.aller('plan') }, 'Dessiner mon potager →')))));
 
     // Avec mes graines
+    // Une ligne par plante du catalogue, et une par graine qui a ses propres dates.
     const parPlante = new Map();
-    for (const g of App.etat.graines) if (PP()[g.pid] && !parPlante.has(g.pid)) parPlante.set(g.pid, g);
+    for (const g of App.etat.graines) {
+      const cle = g.periodes && g.periodes.length ? 'graine-' + g.id : PP()[g.pid] ? g.pid : null;
+      if (cle && !parPlante.has(cle)) parPlante.set(cle, g);
+    }
     const maintenant = [], bientot = [];
-    for (const pid of parPlante.keys()) {
-      const p = PP()[pid];
-      const st = statutSemis(p);
+    for (const g of parPlante.values()) {
+      const p = App.planteGraine(g);
+      const st = statutSemis(p, g);
       for (const s of st.maintenant) maintenant.push({ p, s, decal: 0 });
       if (!st.maintenant.length && st.prochain) bientot.push({ p, s: st.prochain });
     }
@@ -219,7 +224,7 @@
       .filter((g) => !gr.recherche || normaliser(`${(PP()[g.pid] || {}).n || ''} ${g.variete || ''} ${g.texte || ''}`).includes(normaliser(gr.recherche)))
       .map((g) => {
         const p = PP()[g.pid];
-        const st = p ? statutSemis(p) : null;
+        const st = p || (g.periodes && g.periodes.length) ? statutSemis(App.planteGraine(g), g) : null;
         const rang = !st ? 9 : st.maintenant.length ? 0 : st.prochain ? 1 + (st.prochain.debut - ajd) / U.JOUR / 1000 : 5;
         return { g, p, st, rang };
       })
@@ -260,15 +265,16 @@
           h('tbody', {}, lignes.map(({ g, p, st }) => {
             const eg = App.etatGraine(g);
             return h('tr', {},
-              h('td', {}, p ? h('button', { class: 'lien', onclick: () => Vues.fichePlante(p.id) }, App.icone(p), ' ', p.n) : h('select', { class: 'a-corriger', 'aria-label': 'Choisir la plante', onchange: (e) => App.changer(() => { g.pid = e.target.value; }) },
+              h('td', {}, p ? h('button', { class: 'lien', onclick: () => Vues.fichePlante(p.id) }, App.icone(p), ' ', p.n) : h('select', { class: 'a-corriger', 'aria-label': 'Choisir la plante', title: "Plante absente du catalogue de l'app : pas de calendrier pour elle. Si elle y est sous un autre nom, choisis-la.", onchange: (e) => App.changer(() => { g.pid = e.target.value; }) },
                 h('option', { value: '' }, `❓ ${g.texte || 'Inconnue'}`), PLANTES.map((x) => h('option', { value: x.id }, x.n)))),
               h('td', {}, h('input', { class: 'cellule', value: g.variete || '', 'aria-label': 'Variété', onchange: (e) => App.changer(() => { g.variete = e.target.value.trim(); }, false) })),
               h('td', {}, h('input', { class: 'cellule num', type: 'number', value: g.annee || '', 'aria-label': 'Année', onchange: (e) => App.changer(() => { g.annee = +e.target.value || null; }) })),
               h('td', {}, h('input', { class: 'cellule', value: g.quantite || '', 'aria-label': 'Quantité', onchange: (e) => App.changer(() => { g.quantite = e.target.value.trim(); }, false) })),
               h('td', {}, h('input', { class: 'cellule notes', value: g.notes || '', title: g.notes || '', 'aria-label': 'Notes du sachet', onchange: (e) => App.changer(() => { g.notes = e.target.value.trim(); }, false) })),
-              h('td', {}, !st ? '–' : st.maintenant.length
-                ? h('span', { class: 'statut maintenant' }, st.maintenant.map((s) => `${Calendrier.libelle(s.type, p)} jusqu'au ${fmtDate(s.fin)}`).join(' · '))
-                : st.prochain ? h('span', { class: 'statut' }, `${Calendrier.libelle(st.prochain.type, p)} à partir du ${fmtDate(st.prochain.debut)}`) : h('span', { class: 'statut' }, 'Pas de fenêtre chez toi')),
+              h('td', { title: g.periodes && g.periodes.length ? "📦 Dates retenues pour ce sachet (sachet comparé à d'autres sources pour ton lieu), à la place du calcul de l'app" : null },
+                g.periodes && g.periodes.length ? '📦 ' : null, !st ? '–' : st.maintenant.length
+                ? h('span', { class: 'statut maintenant' }, st.maintenant.map((s) => `${Calendrier.libelle(s.type, App.planteGraine(g))} jusqu'au ${fmtDate(s.fin)}`).join(' · '))
+                : st.prochain ? h('span', { class: 'statut' }, `${Calendrier.libelle(st.prochain.type, App.planteGraine(g))} à partir du ${fmtDate(st.prochain.debut)}`) : h('span', { class: 'statut' }, 'Pas de fenêtre chez toi')),
               h('td', {}, eg ? h('span', { class: 'germ germ-' + eg.niveau, title: eg.texte }, eg.niveau === 'ok' ? '✅' : eg.niveau === 'limite' ? '🟠' : '⚠️', ' ', eg.texte) : '–'),
               h('td', {}, h('button', { class: 'bouton-icone', 'aria-label': 'Supprimer', title: 'Supprimer', onclick: () => App.changer((s) => s.graines.splice(s.graines.indexOf(g), 1)) }, '🗑️')));
           })))) : h('p', { class: 'vide' }, App.etat.graines.length ? 'Aucune graine ne correspond au filtre.' : 'Aucune graine pour le moment.')));

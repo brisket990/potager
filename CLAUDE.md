@@ -33,6 +33,7 @@ Conventions utiles :
 - Modifier l'état puis `App.sauver()` ; `App.rendre()` reconstruit la vue (l'éditeur de plan redessine localement avec `dessiner()` pendant les gestes).
 - Données : `localStorage['potager']` (état JSON), IndexedDB `potager` (photos du journal + `grille:soleil`). Connecté : `localStorage['pb_auth']` (jeton), `['synchro']` (potager lié, version, dernier état commun, modifications en attente), `['serveur']` (adresse PocketBase si différente).
 - `App.sauver()` prévient `Synchro.modifie()`, qui envoie quelques instants après la dernière modification. Tout ce qui est dans `App.etat` est partagé, sauf les clés de `LOCAL` dans `synchro.js` (la saison affichée). Les listes d'objets avec un `id` se fusionnent élément par élément : garder un `id` sur tout nouvel élément de liste.
+- Graines (`App.etat.graines`) : `pid` (plante du catalogue) ou, hors catalogue, `pid: null` + `texte` (nom) ; `periodes` facultatif = dates retenues pour ce sachet (`[{ type: si|sd|pl|rec, du: 'MM-JJ', au: 'MM-JJ' }]`, choisies par le Jardinier avec l'utilisateur), qui remplacent le calcul de l'app (`App.periodesGraine`, `App.planteGraine`). Pas encore affichées dans l'onglet Calendrier.
 - Afficher une photo du journal avec `Synchro.photo(cle)` (la télécharge si elle a été ajoutée sur un autre appareil).
 
 ## Choix déjà faits

@@ -127,6 +127,22 @@
     if (age === p.germ) return { niveau: 'limite', texte: `Dernière année de bonne germination (${p.germ} ans)` };
     return { niveau: 'ok', texte: `Bonne germination jusqu'en ${g.annee + p.germ}` };
   };
+  // Plante d'une graine ; pour une graine hors catalogue (`texte` sans `pid` connu), une plante minimale à son nom.
+  App.planteGraine = (g) => PLANTES_PAR_ID[g.pid] || { id: 'graine-' + g.id, n: g.texte || 'Graine', ic: '🌱' };
+  // Dates retenues pour une graine (sachet comparé à d'autres sources pour ce lieu) : `periodes` = [{ type, du: 'MM-JJ', au: 'MM-JJ' }],
+  // qui remplacent le calcul de l'app pour cette graine. Renvoie les périodes qui touchent [debut, fin], comme Calendrier.actions.
+  App.periodesGraine = (g, debut, fin) => {
+    const res = [];
+    for (const per of g.periodes || []) {
+      const [m1, j1] = per.du.split('-').map(Number), [m2, j2] = per.au.split('-').map(Number);
+      const deborde = m2 * 100 + j2 < m1 * 100 + j1; // ex. du 1er novembre au 28 février
+      for (let an = debut.getFullYear() - 1; an <= fin.getFullYear(); an++) {
+        const d = new Date(an, m1 - 1, j1), f = new Date(an + (deborde ? 1 : 0), m2 - 1, j2);
+        if (f >= debut && d <= fin) res.push({ type: per.type, debut: d, fin: f });
+      }
+    }
+    return res.sort((a, b) => a.debut - b.debut);
+  };
 
   // Reconnaît une plante dans une ligne de texte libre (« Tomate cœur de bœuf 2023 »).
   const INDEX_NOMS = [];
