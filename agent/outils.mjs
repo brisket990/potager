@@ -37,7 +37,7 @@ function exigePlante(nom) {
   const p = trouverPlante(nom);
   if (p) return p;
   const proches = plantesProches(nom).slice(0, 8).map((x) => x.n);
-  throw new Error(`Plante « ${nom} » inconnue de l'app.` + (proches.length ? ` Plantes proches : ${proches.join(', ')}.` : ' Utiliser chercher_plante.'));
+  throw new Error(`Plante « ${nom} » inconnue de l'app.` + (proches.length ? ` Plantes proches : ${proches.join(', ')}.` : " Utiliser chercher_plante, ou fiche_plante_perso pour l'ajouter à ce potager."));
 }
 
 // ---------- Contexte (repris de l'onglet Maintenant de l'app) ----------
@@ -96,13 +96,13 @@ const texteStatut = (p, st) => (st.maintenant.length
   : st.prochain ? `${Calendrier.libelle(st.prochain.type, p).toLowerCase()} à partir du ${fmtDate(st.prochain.debut)}` : 'pas de fenêtre de semis chez toi');
 const avecPeriodes = (g) => !!(g.periodes && g.periodes.length);
 const jourMois = (mmjj) => { const [m, j] = mmjj.split('-').map(Number); return `${j}/${String(m).padStart(2, '0')}`; };
-const textePeriodes = (g, p) => g.periodes.map((x) => `${x.type === 'rec' && !PP[g.pid] && !g.cat ? 'récolte ou floraison' : Calendrier.libelle(x.type, p).toLowerCase()} du ${jourMois(x.du)} au ${jourMois(x.au)}`).join(', ');
+const textePeriodes = (g, p) => g.periodes.map((x) => `${x.type === 'rec' && !PP[g.pid] && !g.cat ? 'récolte ou floraison' : Calendrier.libelle(x.type, p).toLowerCase()} du ${jourMois(x.du)} au ${jourMois(x.au)}${x.suivante ? " l'année suivante" : ''}`).join(', ');
 function lirePeriodes(l) {
   if (l == null) return l;
   return l.map((x) => {
     const ok = Calendrier.TYPES[x.type] && [x.du, x.au].every((d) => /^\d{2}-\d{2}$/.test(d || '') && !isNaN(new Date(`2001-${d}`)));
     if (!ok) throw new Error(`Période invalide : ${JSON.stringify(x)}. Attendu { type: si|sd|pl|rec, du: "MM-JJ", au: "MM-JJ" }.`);
-    return { type: x.type, du: x.du, au: x.au };
+    return x.suivante ? { type: x.type, du: x.du, au: x.au, suivante: true } : { type: x.type, du: x.du, au: x.au };
   });
 }
 // Champs d'un sachet communs à ajouter_graines et modifier_graine.
@@ -111,16 +111,44 @@ const CHAMPS_SACHET = {
   limite: { type: 'integer', description: "Année jusqu'à laquelle le sachet est valable : « à semer avant », « validité », « DLUO »." },
   quantite: { type: 'string', description: 'Ex. « 1 sachet », « 50 graines », « 2 g ».' },
   notes: { type: 'string', description: 'Indications du sachet utiles plus tard : période de semis, profondeur, particularités, sources des dates retenues.' },
-  icone: { type: 'string', description: 'Plante hors catalogue seulement : un emoji qui la représente (ex. 🌸 pour une fleur, 🌻 tournesol, 🌿 herbe).' },
-  categorie: { type: 'string', enum: Object.keys(CATEGORIES), description: 'Plante hors catalogue seulement : sa catégorie (fleur → « floraison » au lieu de « récolte »).' },
 };
-function majHorsCatalogue(g, s) {
-  if (s.icone && s.icone.trim()) g.ic = [...new Intl.Segmenter().segment(s.icone.trim())][0].segment; // un seul emoji
-  if (s.categorie && CATEGORIES[s.categorie]) g.cat = s.categorie;
-  g.horsCatalogue = true;
-}
 const PERIODES = { type: 'array', description: "Dates retenues pour ce sachet à Drancy (ou au lieu du potager), après comparaison du sachet avec le calendrier de l'app et d'autres sources. Elles remplacent le calcul de l'app pour cette graine. Types : si = semis à l'abri, sd = semis en place, pl = plantation / mise en place, rec = récolte ou floraison. Dates « MM-JJ », sans année (une période peut passer le 31 décembre).",
-  items: { type: 'object', properties: { type: { type: 'string', enum: ['si', 'sd', 'pl', 'rec'] }, du: { type: 'string', pattern: '^\\d{2}-\\d{2}$' }, au: { type: 'string', pattern: '^\\d{2}-\\d{2}$' } }, required: ['type', 'du', 'au'] } };
+  items: { type: 'object', properties: { type: { type: 'string', enum: ['si', 'sd', 'pl', 'rec'] }, du: { type: 'string', pattern: '^\\d{2}-\\d{2}$' }, au: { type: 'string', pattern: '^\\d{2}-\\d{2}$' },
+    suivante: { type: 'boolean', description: "true si la période tombe l'année suivant le semis (floraison d'une bisannuelle, récolte d'un semis d'automne)." } }, required: ['type', 'du', 'au'] } };
+
+// ---------- Plantes perso (absentes du catalogue, décrites pour ce potager : voir App.majPlantesPerso) ----------
+const FICHE = {
+  latin: { type: 'string', description: 'Nom latin (ex. « Digitalis purpurea »).' },
+  famille: { type: 'string', description: 'Famille botanique en français (ex. « Plantaginacées ») : sert à la rotation des cultures.' },
+  categorie: { type: 'string', enum: Object.keys(CATEGORIES), description: 'fleur → « floraison » au lieu de « récolte ».' },
+  icone: { type: 'string', description: 'Un emoji qui la représente (🌸 fleur, 🌻 tournesol, 🌿 feuillage…).' },
+  gel: { type: 'string', enum: ['tendre', 'demi', 'rustique'], description: 'tendre = tuée par le gel, demi = supporte de petites gelées, rustique = résiste au froid. Sert aux alertes de gel.' },
+  exposition: { type: 'string', enum: ['soleil', 'mi-ombre', 'ombre'] },
+  hauteur: { type: 'integer', description: 'Hauteur adulte en cm (ombre portée sur le plan).' },
+  espacement: { type: 'array', items: { type: 'integer' }, minItems: 2, maxItems: 2, description: '[entre plants, entre rangs] en cm.' },
+  dates: { ...PERIODES, description: "Calendrier retenu pour ce potager (fixe, sans année) : semis, plantation, floraison ou récolte. Mêmes types que periodes ; « suivante » pour l'année d'après." },
+  conseil: { type: 'string', description: 'Conseil de culture court (et toxicité éventuelle).' },
+  source: { type: 'string', description: 'Sources des dates et valeurs (ex. « sachet Germisem, fiche Vilmorin »).' },
+};
+const cleFamille = (nom) => {
+  const n = normaliser(nom);
+  return Object.keys(FAMILLES).find((k) => normaliser(FAMILLES[k].n.split(' (')[0]) === n) || n.replace(/[^a-z]+/g, '-');
+};
+// Remplit une plante perso à partir des champs de FICHE (seulement ceux donnés).
+function ecrireFiche(d, f) {
+  if (f.latin) d.l = f.latin.trim();
+  if (f.famille) { d.fam = cleFamille(f.famille); d.famille = f.famille.trim(); }
+  if (f.categorie && CATEGORIES[f.categorie]) d.cat = f.categorie;
+  if (f.icone && f.icone.trim()) d.ic = [...new Intl.Segmenter().segment(f.icone.trim())][0].segment; // un seul emoji
+  if (f.gel) d.gel = f.gel;
+  if (f.exposition) d.exp = f.exposition;
+  if (f.hauteur) d.h = f.hauteur;
+  if (f.espacement) d.esp = f.espacement;
+  if (f.dates) d.dates = lirePeriodes(f.dates);
+  if (f.conseil) d.c = f.conseil.trim();
+  if (f.source) d.source = f.source.trim();
+}
+const trouverPerso = (etat, nom) => (etat.plantesPerso || []).find((d) => d.id === nom || normaliser(d.n) === normaliser(nom));
 
 function datesGel() {
   const an = new Date().getFullYear();
@@ -249,7 +277,8 @@ outil('fiche_plante',
     const emplacements = plansUtiles().flatMap(([a, objets]) => objets.filter((o) => o.pid === p.id).map((o) => `${a} : ${decrireCulture(o, objets)}`));
     const fam = FAMILLES[p.fam] || {};
     return [
-      `${p.ic || ''} ${p.n} (${p.l}) — ${CATEGORIES[p.cat] || p.cat}, famille ${fam.n || p.fam}${p.per ? ', vivace' : ''}.`,
+      `${p.ic || ''} ${p.n}${p.l ? ` (${p.l})` : ''} — ${CATEGORIES[p.cat] || p.cat}, famille ${fam.n || p.fam}${p.per ? ', vivace' : ''}.`,
+      p.perso ? `Plante perso de ce potager (absente du catalogue de l'app) : dates fixes${p.source ? ` d'après ${p.source}` : ''}, non décalées sous abri. Corriger sa fiche avec fiche_plante_perso.` : null,
       `Gel : ${GEL[p.gel] || p.gel}.${p.sol ? ` Semis en place quand le sol atteint ${p.sol} °C.` : ''} Exposition : ${p.exp || 'soleil'}.` +
         (p.esp ? ` Espacement : ${p.esp[0]} cm entre plants, ${p.esp[1]} cm entre rangs.` : '') + (p.h ? ` Hauteur : ${p.h} cm.` : ''),
       p.dtm ? `Récolte ${p.dtm[0]} à ${p.dtm[1]} jours après ${p.dp ? 'la plantation' : 'le semis'}, pendant ${p.rec || 2} semaines environ.${p.succ ? ` Semis échelonnés toutes les ${p.succ} semaines.` : ''}` : null,
@@ -310,7 +339,7 @@ outil('lister_graines',
       .map((g) => {
         const p = PP[g.pid], plante = App.planteGraine(g);
         const eg = App.etatGraine(g);
-        return `${p ? p.n : `${g.ic ? g.ic + ' ' : ''}${g.texte || '?'} (hors catalogue de l'app${g.cat ? `, ${(CATEGORIES[g.cat] || g.cat).toLowerCase()}` : ''})`}${g.variete ? ` – ${g.variete}` : ''}` +
+        return `${p ? `${p.n}${p.perso ? ' (plante perso)' : ''}` : `${g.texte || '?'} (non reconnue : la rattacher avec fiche_plante_perso ou modifier_graine)`}${g.variete ? ` – ${g.variete}` : ''}` +
           `${g.annee ? ` – sachet de ${g.annee}` : ''}${g.quantite ? ` – ${g.quantite}` : ''}` + // la date limite est dans l'état de germination
           (g.notes ? ` – notes : ${g.notes}` : '') + (eg ? ` – ${eg.texte}` : '') +
           (avecPeriodes(g) ? ` – dates retenues : ${textePeriodes(g, plante)}` : '') +
@@ -325,57 +354,81 @@ outil('ajouter_graines',
     plante: { type: 'string', description: 'Nom de la plante (ex. « Tomate », « Haricot nain »).' },
     variete: { type: 'string' },
     ...CHAMPS_SACHET,
-    periodes: PERIODES,
+    periodes: { ...PERIODES, description: PERIODES.description + " Pour une plante absente du catalogue, mettre plutôt le calendrier dans fiche.dates." },
+    fiche: { type: 'object', properties: FICHE, description: "Plante absente du catalogue de l'app seulement : sa fiche, pour en faire une plante perso du potager (plan, calendrier, alertes)." },
   }, required: ['plante'] } } }, ['graines'],
   async (pg, { graines }) => {
     for (const s of graines) s.periodes = lirePeriodes(s.periodes);
     const res = await pg.modifier((etat) => {
-      const ajoutees = [], majs = [], horsCatalogue = [];
+      const ajoutees = [], majs = [], perso = [];
       for (const s of graines) {
-        const p = trouverPlante(s.plante) || trouverPlante(`${s.plante} ${s.variete || ''}`);
-        // Hors catalogue : gardée sous son nom (`texte`), comme une ligne non reconnue de l'import de l'app.
-        const texte = p ? undefined : s.plante.trim();
-        const nom = p ? p.n : texte;
+        let p = trouverPlante(s.plante) || trouverPlante(`${s.plante} ${s.variete || ''}`);
+        if (!p) {
+          // Absente du catalogue : nouvelle plante perso du potager, décrite par sa fiche.
+          const d = { id: 'perso-' + uid(), n: s.plante.trim() };
+          ecrireFiche(d, { ...(s.fiche || {}), dates: (s.fiche || {}).dates || s.periodes });
+          (etat.plantesPerso = etat.plantesPerso || []).push(d);
+          App.majPlantesPerso();
+          p = PP[d.id];
+          s.periodes = null; // le calendrier est sur la plante
+          perso.push(p.n);
+        }
         const variete = (s.variete || '').trim();
-        const existante = etat.graines.find((g) => (p ? g.pid === p.id : !PP[g.pid] && normaliser(g.texte || '') === normaliser(texte)) &&
+        const existante = etat.graines.find((g) => g.pid === p.id &&
           normaliser(g.variete || '') === normaliser(variete) && (g.annee || null) === (s.annee || null) && (g.limite || null) === (s.limite || null));
         if (existante) {
           if (s.quantite) existante.quantite = s.quantite;
           if (s.notes) existante.notes = s.notes;
           if (s.periodes && s.periodes.length) existante.periodes = s.periodes;
-          if (!p) majHorsCatalogue(existante, s);
-          majs.push(`${nom}${variete ? ` ${variete}` : ''}`);
+          majs.push(`${p.n}${variete ? ` ${variete}` : ''}`);
         } else {
-          const g = p ? { id: uid(), pid: p.id } : { id: uid(), pid: null, texte, horsCatalogue: true };
-          Object.assign(g, { variete, annee: s.annee || null, limite: s.limite || null, quantite: s.quantite || '' });
+          const g = { id: uid(), pid: p.id, variete, annee: s.annee || null, limite: s.limite || null, quantite: s.quantite || '' };
           if (s.notes) g.notes = s.notes;
           if (s.periodes && s.periodes.length) g.periodes = s.periodes;
-          if (!p) majHorsCatalogue(g, s);
           etat.graines.push(g);
-          ajoutees.push(`${nom}${variete ? ` ${variete}` : ''}${s.annee ? ` (sachet de ${s.annee})` : ''}${s.limite ? ` (valable jusqu'en ${s.limite})` : ''} [id ${g.id}]`);
-          if (!p) horsCatalogue.push(nom);
+          ajoutees.push(`${p.n}${variete ? ` ${variete}` : ''}${s.annee ? ` (sachet de ${s.annee})` : ''}${s.limite ? ` (valable jusqu'en ${s.limite})` : ''} [id ${g.id}]`);
         }
       }
-      return { ajoutees, majs, horsCatalogue };
+      return { ajoutees, majs, perso };
     });
     return [`Ajoutées (${res.ajoutees.length}) :\n${liste(res.ajoutees, '(aucune)')}`,
       res.majs.length ? `Déjà en stock, mises à jour : ${res.majs.join(', ')}` : null,
-      res.horsCatalogue.length ? `Hors catalogue de l'app (ajoutées sous leur nom, sans calcul de dates ni durée de germination : elles suivent les dates retenues ou le sachet) : ${res.horsCatalogue.join(', ')}.` : null].filter(Boolean).join('\n');
+      res.perso.length ? `Nouvelles plantes perso du potager (absentes du catalogue, avec leur fiche ; visibles dans le plan et le calendrier) : ${res.perso.join(', ')}. Vérifier ou compléter leur fiche avec fiche_plante.` : null].filter(Boolean).join('\n');
+  });
+
+outil('fiche_plante_perso',
+  "Crée ou corrige une plante perso du potager (plante absente du catalogue de l'app : fleur d'ornement, variété rare…) : nom latin, famille, catégorie, icône, résistance au gel, exposition, hauteur, espacement, calendrier (dates fixes), conseil et sources. Ne donner que les champs à changer. Une graine déjà en stock sous ce nom mais non reconnue y est rattachée.",
+  { plante: { type: 'string', description: 'Nom de la plante perso (ou son id).' }, ...FICHE }, ['plante'],
+  async (pg, { plante, ...fiche }) => {
+    if (trouverPlante(plante) && !(trouverPlante(plante) || {}).perso) throw new Error(`« ${plante} » est déjà dans le catalogue de l'app (${trouverPlante(plante).n}) : utiliser fiche_plante, ou des dates retenues sur la graine (modifier_graine).`);
+    return pg.modifier((etat) => {
+      let d = trouverPerso(etat, plante);
+      const nouvelle = !d;
+      if (nouvelle) (etat.plantesPerso = etat.plantesPerso || []).push(d = { id: 'perso-' + uid(), n: plante.trim() });
+      // Graines non reconnues à ce nom (ancien format) : rattachées, et leurs dates retenues deviennent le calendrier de la plante.
+      const rattachees = etat.graines.filter((g) => !PP[g.pid] && normaliser(g.texte || '') === normaliser(d.n));
+      if (!fiche.dates && !d.dates) { const g = rattachees.find(avecPeriodes); if (g) d.dates = g.periodes; }
+      for (const g of rattachees) { g.pid = d.id; for (const k of ['texte', 'horsCatalogue', 'ic', 'cat', 'periodes']) delete g[k]; }
+      ecrireFiche(d, fiche);
+      App.majPlantesPerso();
+      return `Plante perso ${nouvelle ? 'créée' : 'mise à jour'} : ${d.ic || '🌱'} ${d.n}${d.l ? ` (${d.l})` : ''}` +
+        (d.dates && d.dates.length ? ` – calendrier : ${textePeriodes({ periodes: d.dates, pid: d.id }, PP[d.id])}` : ' – pas encore de calendrier') +
+        (rattachees.length ? ` – ${rattachees.length} graine(s) rattachée(s)` : '') + ` [id ${d.id}]`;
+    });
   });
 
 outil('modifier_graine',
-  "Corrige une graine du stock (id donné par lister_graines) : plante, variété, année du sachet, date limite, quantité, notes, icône et catégorie (hors catalogue) ou dates retenues (periodes ; [] ou null pour revenir au calcul de l'app). Ne donner que les champs à changer ; null efface une année.",
+  "Corrige une graine du stock (id donné par lister_graines) : plante, variété, année du sachet, date limite, quantité, notes ou dates retenues pour ce sachet (periodes ; [] ou null pour revenir au calendrier de la plante). Ne donner que les champs à changer ; null efface une année.",
   { id: { type: 'string' }, plante: { type: 'string' }, variete: { type: 'string' }, ...CHAMPS_SACHET,
     annee: { ...CHAMPS_SACHET.annee, type: ['integer', 'null'] }, limite: { ...CHAMPS_SACHET.limite, type: ['integer', 'null'] }, periodes: { ...PERIODES, type: ['array', 'null'] } }, ['id'],
   async (pg, { id, plante, ...champs }) => {
-    const p = plante ? exigePlante(plante) : null;
     const periodes = lirePeriodes(champs.periodes);
     return pg.modifier((etat) => {
+      const p = plante ? exigePlante(plante) : null;
       const g = etat.graines.find((x) => x.id === id);
       if (!g) throw new Error(`Aucune graine avec l'id ${id}.`);
       if (p) { g.pid = p.id; for (const k of ['texte', 'horsCatalogue', 'ic', 'cat']) delete g[k]; }
       for (const k of ['variete', 'annee', 'limite', 'quantite', 'notes']) if (champs[k] !== undefined) g[k] = champs[k];
-      if (!PP[g.pid]) majHorsCatalogue(g, champs);
       if (periodes !== undefined) { if (periodes && periodes.length) g.periodes = periodes; else delete g.periodes; }
       return `Graine mise à jour : ${(PP[g.pid] || {}).n || g.texte}${g.variete ? ` ${g.variete}` : ''}${g.annee ? `, sachet de ${g.annee}` : ''}${g.limite ? `, valable jusqu'en ${g.limite}` : ''}.`;
     });

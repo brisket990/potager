@@ -119,6 +119,7 @@ export class Potager {
     this.jardin = { id, nom: d.nom, version: d.version, modifie_par: d.modifie_par };
     App.etat = Object.assign(App.etatDefaut(), JSON.parse(JSON.stringify(d.donnees || {})));
     App.etat.annee = saisonCourante();
+    App.majPlantesPerso();
     return App.etat;
   }
 

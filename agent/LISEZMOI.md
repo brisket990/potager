@@ -15,7 +15,8 @@ Aucune dépendance : Node.js 20 ou plus suffit.
 | `fiche_plante` | Calendrier chez soi (pleine terre, tunnel, serre), exigences, associations, stock, emplacement |
 | `associations` | Deux plantes côte à côte ? (avec le niveau de preuve) |
 | `verifier_plan` | Voisinages et rotations du plan de la saison |
-| `lister_graines` / `ajouter_graines` / `modifier_graine` / `retirer_graine` | Stock de graines, avec les notes du sachet |
+| `lister_graines` / `ajouter_graines` / `modifier_graine` / `retirer_graine` | Stock de graines : notes du sachet, année et date de validité, dates retenues pour le sachet |
+| `fiche_plante_perso` | Crée ou corrige une plante perso (absente du catalogue) : fiche et calendrier fixe, pour le plan, le calendrier et les alertes |
 | `noter_journal` / `lire_journal` / `bilan` | Journal (avec auteur et photos) et bilan des récoltes |
 | `chercher_dans_les_livres` / `livres` | Passages des livres de jardinage de la famille, avec titre, auteur et chapitre |
 | `alertes` | Gel, forte chaleur, manque d'eau, orage des 3 prochains jours, seulement pour les cultures en terre |

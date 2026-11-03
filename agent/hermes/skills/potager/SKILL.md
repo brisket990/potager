@@ -29,9 +29,10 @@ Les outils du serveur MCP « potager » donnent l'état réel du jardin et les c
    - si elles diffèrent, proposer les dates retenues et demander si on enregistre avec elles.
 5. Puis `ajouter_graines` avec tous les sachets d'un coup :
    - indications utiles et sources dans `notes` ;
-   - dates retenues dans `periodes` (obligatoire pour une plante hors catalogue dont on connaît le calendrier ; pour une plante du catalogue, seulement si elles diffèrent du calcul de l'app) : objets `{ type, du, au }`, `type` parmi `si` (semis à l'abri / sous verre), `sd` (semis en place), `pl` (plantation, mise en place), `rec` (récolte ou floraison), dates `"MM-JJ"` ;
-   - plante hors catalogue : `icone` (un emoji qui lui ressemble : 🌸 fleur, 🌻 tournesol, 🌿 feuillage…) et `categorie` (`fleur`, `legume`, `aromatique`, `fruit`, `engrais`).
-   Pour une graine déjà en stock : `modifier_graine`.
+   - plante du catalogue : dates retenues dans `periodes`, seulement si elles diffèrent du calcul de l'app ;
+   - plante absente du catalogue (fleur d'ornement, plante rare…) : elle devient une **plante perso** du potager, visible dans le plan, le calendrier et les alertes. Remplir sa `fiche` complète, d'après le sachet et les sources : `latin`, `famille` (botanique, en français), `categorie`, `icone` (un emoji qui lui ressemble : 🌸, 🌻, 🌿…), `gel`, `exposition`, `hauteur`, `espacement`, `dates` (le calendrier retenu), `conseil` (toxicité comprise), `source` ;
+   - dates : objets `{ type, du, au }`, `type` parmi `si` (semis à l'abri / sous verre), `sd` (semis en place), `pl` (plantation, mise en place), `rec` (récolte ou floraison), dates `"MM-JJ"`, et `suivante: true` pour ce qui arrive l'année d'après (floraison d'une bisannuelle, récolte d'un semis d'automne).
+   Pour une graine déjà en stock : `modifier_graine` ; pour corriger la fiche d'une plante perso : `fiche_plante_perso`.
 6. Répondre par ce qui a été enregistré et la prochaine action (`lister_graines`). Plante hors catalogue (fleurs d'ornement…) : prévenir que l'app n'a pas de fiche pour elle et suit seulement les dates retenues. Plante toxique (digitale, ricin, datura…) : rappeler la toxicité et conseiller de l'installer à l'écart du potager nourricier.
 
 ## Ce qu'ils racontent (« j'ai semé… », « récolté 2 kg… », « des pucerons sur… »)

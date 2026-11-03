@@ -42,8 +42,19 @@
     return null;
   }
 
+  // Période à dates fixes { du: 'MM-JJ', au: 'MM-JJ', suivante? } pour une saison : [début, fin].
+  // `suivante` la place l'année d'après (floraison d'une bisannuelle) ; une période peut passer le 31 décembre.
+  function periodeFixe(x, annee) {
+    const [m1, j1] = x.du.split('-').map(Number), [m2, j2] = x.au.split('-').map(Number);
+    const a = annee + (x.suivante ? 1 : 0);
+    return [new Date(a, m1 - 1, j1), new Date(a + (m2 * 100 + j2 < m1 * 100 + j1 ? 1 : 0), m2 - 1, j2)];
+  }
+
   // Fenêtres pour une saison (l'année du plan). Peut déborder sur l'année suivante.
   function fenetres(p, ctx, annee, decal = 0) {
+    // Plante perso : dates fixes choisies pour ce potager (pas de calcul autour des gelées).
+    if (p.perso) return (p.dates || []).map((x) => { const [debut, fin] = periodeFixe(x, annee); return { type: x.type, debut, fin }; });
+
     const DG = dateDuJour(annee, ctx.dg - decal * 7);
     const PG = dateDuJour(annee, ctx.pg + decal * 7);
     const DGsuivante = dateDuJour(annee + 1, ctx.dg - decal * 7);
@@ -175,5 +186,5 @@
     return { debut, fin };
   }
 
-  window.Calendrier = { ABRIS, TYPES, libelle, couleur, contexte, jourSol, fenetres, segmentsAnnee, actions, occupation };
+  window.Calendrier = { ABRIS, TYPES, libelle, couleur, contexte, jourSol, periodeFixe, fenetres, segmentsAnnee, actions, occupation };
 })();

@@ -240,9 +240,12 @@
       e.preventDefault();
       const p = PLANTES.find((x) => normaliser(x.n) === normaliser(fPlante.value)) || PP()[(App.reconnaitre(fPlante.value) || {}).pid];
       const nom = fPlante.value.trim();
-      if (!p && !confirm(`« ${nom} » n'est pas dans le catalogue de l'app. L'ajouter quand même ? Elle n'aura pas de dates de semis calculées : suis le sachet.`)) return;
-      const g = p ? { id: uid(), pid: p.id } : { id: uid(), pid: null, texte: nom, horsCatalogue: true };
-      App.changer((s) => s.graines.push(Object.assign(g, { variete: fVariete.value.trim(), annee: +fAnnee.value || null, limite: +fLimite.value || null, quantite: fQte.value.trim() })));
+      if (!p && !confirm(`« ${nom} » n'est pas dans le catalogue de l'app. L'ajouter comme plante perso ? Elle n'aura pas encore de dates ni de vraie fiche : le Jardinier peut les compléter.`)) return;
+      const pid = p ? p.id : 'perso-' + uid();
+      App.changer((s) => {
+        if (!p) (s.plantesPerso = s.plantesPerso || []).push({ id: pid, n: nom });
+        s.graines.push({ id: uid(), pid, variete: fVariete.value.trim(), annee: +fAnnee.value || null, limite: +fLimite.value || null, quantite: fQte.value.trim() });
+      });
       App.toast(`${p ? p.n : nom} ajouté.`);
     };
 
@@ -268,7 +271,7 @@
           h('tbody', {}, lignes.map(({ g, p, st }) => {
             const eg = App.etatGraine(g);
             return h('tr', {},
-              h('td', {}, p ? h('button', { class: 'lien', onclick: () => Vues.fichePlante(p.id) }, App.icone(p), ' ', p.n)
+              h('td', {}, p ? [h('button', { class: 'lien', onclick: () => Vues.fichePlante(p.id) }, App.icone(p), ' ', p.n), p.perso ? h('div', { class: 'sous' }, 'plante perso') : null]
                 // Plante volontairement hors catalogue (fleur d'ornement…) : son nom et son icône.
                 : g.horsCatalogue ? h('span', { title: "Plante absente du catalogue de l'app : elle suit les dates retenues pour ce sachet, ou à défaut celles du sachet." }, App.icone(App.planteGraine(g)), ' ', g.texte, h('div', { class: 'sous' }, 'hors catalogue'))
                 // Ligne d'import non reconnue : choisir la plante.
@@ -373,7 +376,7 @@
     const remplir = (l) => grille.replaceChildren(...l.map((p) => h('button', { class: 'carte-plante', onclick: () => Vues.fichePlante(p.id) },
       h('div', { class: 'carte-plante-ic' }, p.ic || '🌱'),
       h('div', {}, h('div', { class: 'carte-plante-nom' }, p.n), h('div', { class: 'latin' }, p.l),
-        h('div', { class: 'etiquettes' }, h('span', { class: 'etiquette' }, CATEGORIES[p.cat]), h('span', { class: 'etiquette gel-' + p.gel }, { tendre: 'gélive', demi: 'semi-rustique', rustique: 'rustique' }[p.gel]), p.per ? h('span', { class: 'etiquette' }, 'vivace') : null)))));
+        h('div', { class: 'etiquettes' }, h('span', { class: 'etiquette' }, CATEGORIES[p.cat]), h('span', { class: 'etiquette gel-' + p.gel }, { tendre: 'gélive', demi: 'semi-rustique', rustique: 'rustique' }[p.gel]), p.per ? h('span', { class: 'etiquette' }, 'vivace') : null, p.perso ? h('span', { class: 'etiquette' }, 'perso') : null)))));
     remplir(liste);
     return h('div', { class: 'page' },
       h('div', { class: 'page-tete' }, h('h1', {}, `🌱 Plantes (${PLANTES.length})`),
@@ -404,6 +407,7 @@
     const contenu = h('div', { class: 'fiche' },
       h('div', { class: 'titre-plante' }, App.icone(p, '2.4em'), h('div', {}, h('div', { class: 'latin' }, p.l), h('div', {}, `${CATEGORIES[p.cat]} · ${FAMILLES[p.fam].n}`))),
       h('p', { class: 'conseil' }, p.c),
+      p.perso ? h('p', { class: 'note' }, "🌱 Plante ajoutée à ton potager (absente du catalogue de l'app) : ses dates sont fixes, choisies pour ton lieu", p.source ? ` d'après ${p.source}` : '', ', et ne se décalent pas sous serre.') : null,
       h('h3', {}, `Calendrier ${annee} chez toi`),
       legende(p.cat === 'fleur' || p.cat === 'engrais'),
       h('div', { class: 'gantt compact' },
@@ -412,7 +416,7 @@
         h('div', { class: 'gantt-ligne' }, h('div', { class: 'gantt-nom' }, 'Sous serre'), barreAnnee(segsSerre, annee, p))),
       h('ul', { class: 'liste-dates' }, Calendrier.fenetres(p, App.ctx, annee, 0).map((s) => h('li', {},
         h('span', { class: 'pastille', style: { background: Calendrier.couleur(s.type, p) } }),
-        `${Calendrier.libelle(s.type, p)} : ${fmtDate(s.debut)} → ${fmtDate(s.fin)}${s.fin.getFullYear() !== s.debut.getFullYear() ? ' ' + s.fin.getFullYear() : ''}`))),
+        `${Calendrier.libelle(s.type, p)} : ${fmtDate(s.debut)}${s.debut.getFullYear() !== annee ? ' ' + s.debut.getFullYear() : ''} → ${fmtDate(s.fin)}${s.fin.getFullYear() !== s.debut.getFullYear() || s.debut.getFullYear() !== annee ? ' ' + s.fin.getFullYear() : ''}`))),
       js ? h('p', { class: 'note' }, `Chez toi, le sol atteint ${p.sol} °C (seuil pour semer en place) ${periode(U.dateDuJour(annee, js))} en moyenne.`) : null,
       p.sd && !p.per && Calendrier.jourSol(App.ctx, p.sol) == null ? h('p', { class: 'alerte' }, `Le sol n'atteint jamais ${p.sol} °C en moyenne chez toi : sème à l'abri ou sous serre.`) : null,
       h('h3', {}, 'Culture'),
@@ -421,8 +425,8 @@
         h('dt', {}, 'Exposition'), h('dd', {}, p.exp || 'soleil'),
         h('dt', {}, 'Espacement'), h('dd', {}, `${p.esp[0]} cm entre plants, ${p.esp[1]} cm entre rangs`),
         h('dt', {}, 'Hauteur'), h('dd', {}, `≈ ${p.h} cm`),
-        p.per ? null : [h('dt', {}, p.cat === 'fleur' || p.cat === 'engrais' ? 'Jusqu\'à la floraison' : 'Jusqu\'à la récolte'), h('dd', {}, `${p.dtm[0]} à ${p.dtm[1]} jours ${p.dp ? 'après plantation' : 'après semis'}`)],
-        h('dt', {}, 'Sol mini pour semer'), h('dd', {}, `${p.sol} °C`),
+        p.per || !p.dtm ? null : [h('dt', {}, p.cat === 'fleur' || p.cat === 'engrais' ? 'Jusqu\'à la floraison' : 'Jusqu\'à la récolte'), h('dd', {}, `${p.dtm[0]} à ${p.dtm[1]} jours ${p.dp ? 'après plantation' : 'après semis'}`)],
+        p.sol ? [h('dt', {}, 'Sol mini pour semer'), h('dd', {}, `${p.sol} °C`)] : null,
         p.succ ? [h('dt', {}, 'Semis échelonnés'), h('dd', {}, `toutes les ${p.succ} semaines`)] : null,
         h('dt', {}, 'Durée germinative'), h('dd', {}, p.germ ? `${p.germ} an${p.germ > 1 ? 's' : ''}` : `se cultive à partir de ${{ plant: 'plants', bulbe: 'bulbes', tubercule: 'tubercules' }[p.achat] || 'plants'}`)),
       bons.length ? [h('h3', {}, '✅ Bons voisins'), listeAssoc(bons)] : null,
@@ -432,8 +436,8 @@
         return h('li', {}, `${g.variete || p.n}${g.annee ? ` (${g.annee})` : ''}`, eg ? h('span', { class: 'sous' }, ` – ${eg.texte}`) : null);
       }))] : null,
       h('h3', {}, 'Pour vérifier'),
-      h('p', { class: 'note' }, h('a', { href: `https://fr.wikipedia.org/w/index.php?search=${encodeURIComponent(p.l.split(' var.')[0].split(' /')[0])}`, target: '_blank', rel: 'noopener' }, 'Wikipédia'), ' · ',
-        h('a', { href: `https://www.rhs.org.uk/search?query=${encodeURIComponent(p.l.split(' var.')[0])}`, target: '_blank', rel: 'noopener' }, 'RHS'), ' · ',
+      h('p', { class: 'note' }, h('a', { href: `https://fr.wikipedia.org/w/index.php?search=${encodeURIComponent((p.l || p.n).split(' var.')[0].split(' /')[0])}`, target: '_blank', rel: 'noopener' }, 'Wikipédia'), ' · ',
+        h('a', { href: `https://www.rhs.org.uk/search?query=${encodeURIComponent((p.l || p.n).split(' var.')[0])}`, target: '_blank', rel: 'noopener' }, 'RHS'), ' · ',
         h('button', { class: 'lien', onclick: () => { fermer(); App.aller('reglages'); } }, 'Sources et méthode')));
     const fermer = App.modal(p.n, contenu, true);
   };

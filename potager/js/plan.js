@@ -849,7 +849,7 @@
           `${Calendrier.libelle(s.type, p)} : ${fmtDate(s.debut)} → ${fmtDate(s.fin)}${s.fin.getFullYear() > App.etat.annee ? ' (' + s.fin.getFullYear() + ')' : ''}`))),
       p.per ? null : h('label', { class: 'champ' }, 'Mise en place (si différente)',
         h('input', { type: 'date', value: o.debut || '', onchange: (e) => { o.debut = e.target.value || undefined; enregistrer(); rendrePanneau(); dessiner(); } })),
-      occ && !occ.vivace ? h('p', { class: 'note' }, `Occupe la place du ${fmtDate(occ.debut)} au ${fmtDate(occ.fin)} ; ensuite, elle est libre pour une autre culture (succession).`) : null,
+      occ && !occ.vivace ? h('p', { class: 'note' }, `Occupe la place du ${fmtDate(occ.debut)} au ${fmtDate(occ.fin)}${occ.fin.getFullYear() !== occ.debut.getFullYear() ? ' ' + occ.fin.getFullYear() : ''} ; ensuite, elle est libre pour une autre culture (succession).`) : null,
       o.raison ? h('div', { class: 'raison-auto' }, h('strong', {}, '🪄 Placé ici car : '), o.raison) : null,
       Terrain.blocVerdict(p, o, objs, App.etat.annee) || (App.soleil ? null : h('p', { class: 'note' }, '☀️ Calcule l\'ensoleillement (bouton Soleil) pour savoir si cet endroit convient.')),
 

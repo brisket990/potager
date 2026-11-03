@@ -14,6 +14,7 @@
     plans: {},
     graines: [],
     journal: [],
+    plantesPerso: [], // plantes ajoutées à ce potager (hors catalogue), voir App.majPlantesPerso
   });
 
   const App = {
@@ -142,14 +143,32 @@
   App.periodesGraine = (g, debut, fin) => {
     const res = [];
     for (const per of g.periodes || []) {
-      const [m1, j1] = per.du.split('-').map(Number), [m2, j2] = per.au.split('-').map(Number);
-      const deborde = m2 * 100 + j2 < m1 * 100 + j1; // ex. du 1er novembre au 28 février
       for (let an = debut.getFullYear() - 1; an <= fin.getFullYear(); an++) {
-        const d = new Date(an, m1 - 1, j1), f = new Date(an + (deborde ? 1 : 0), m2 - 1, j2);
+        const [d, f] = Calendrier.periodeFixe(per, an);
         if (f >= debut && d <= fin) res.push({ type: per.type, debut: d, fin: f });
       }
     }
     return res.sort((a, b) => a.debut - b.debut);
+  };
+
+  // ---------- Plantes perso ----------
+  // Plantes absentes du catalogue, décrites pour ce potager (`App.etat.plantesPerso`, partagées comme le reste) :
+  // { id: 'perso-…', n, l?, cat, fam?, famille?, ic, gel, exp, h, esp: [cm, cm], germ?, dates: [{ type, du, au, suivante? }], c?, source? }.
+  // Elles sont ajoutées à PLANTES / PLANTES_PAR_ID : plan, calendrier, graines et alertes les traitent comme les autres,
+  // avec des dates fixes (Calendrier.fenetres) au lieu d'un calcul autour des gelées.
+  App.majPlantesPerso = () => {
+    for (let i = PLANTES.length - 1; i >= 0; i--) if (PLANTES[i].perso) { delete PLANTES_PAR_ID[PLANTES[i].id]; PLANTES.splice(i, 1); }
+    for (const d of App.etat.plantesPerso || []) {
+      const p = { l: '', cat: 'fleur', ic: '🌱', gel: 'demi', exp: 'soleil', h: 50, esp: [30, 30], achat: 'graine', dates: [], ...d, perso: true };
+      // Famille inconnue du catalogue : ajoutée à la liste ; sans famille, une famille à elle seule (pas de faux conflit de rotation).
+      if (!p.fam) p.fam = 'famille-' + p.id;
+      if (!FAMILLES[p.fam]) FAMILLES[p.fam] = { n: p.famille || 'Famille non précisée', c: '#8a9a7b' };
+      p.soleil = { ombre: 3, 'mi-ombre': 4 }[p.exp] || 6;
+      p.ombreEte = false;
+      p.critique = p.cat === 'fleur' || p.cat === 'fruit' ? 'fruit' : 'tout';
+      PLANTES.push(p);
+      PLANTES_PAR_ID[p.id] = p;
+    }
   };
 
   // Reconnaît une plante dans une ligne de texte libre (« Tomate cœur de bœuf 2023 »).
@@ -244,6 +263,7 @@
   App.aller = (vue) => { location.hash = vue; };
 
   App.rendre = () => {
+    App.majPlantesPerso();
     const racine = document.getElementById('app');
     const vue = Vues[App.vue] ? App.vue : 'maintenant';
     const nav = h('nav', { class: 'onglets', 'aria-label': 'Sections' },
