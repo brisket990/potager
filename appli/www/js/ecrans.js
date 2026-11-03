@@ -605,10 +605,28 @@
         h('section', { class: 'section' }, h('div', { class: 'carte' }, h('ul', { class: 'liste' },
           h('li', { class: 'ligne' }, vignette(I('compte'), 'verte'), h('div', { class: 'ligne-texte' }, h('div', { class: 'ligne-titre' }, Synchro.prenom()), h('div', { class: 'ligne-sous' }, `Potager « ${Synchro.nomJardin()} »`))),
           h('li', { class: 'ligne' }, vignette(I(Synchro.statut() === 'hors-ligne' ? 'horsLigne' : 'nuage'), 'bleue'), h('div', { class: 'ligne-texte' }, h('div', { class: 'ligne-titre' }, 'Synchronisation'), h('div', { class: 'ligne-sous synchro-texte' }, Synchro.texteStatut())))))),
+        h('section', { class: 'section' }, h('h2', { class: 'titre-section' }, 'Ton nom'), formulaireNom()),
         h('p', { class: 'note', style: { margin: '14px 4px' } }, "Tout ce que tu notes ici est gardé sur l'appareil et part sur le serveur dès qu'il y a du réseau. Le plan se modifie sur le site."),
         h('button', { class: 'bouton secondaire plein', onclick: () => { if (confirm('Se déconnecter ? Les données restent sur cet appareil.')) { Synchro.deconnexion(); App.rendre(); } } }, I('sortie', 20), 'Se déconnecter'))
         : formulaireConnexion(),
     };
+  }
+
+  // Nom affiché dans le journal et par le Jardinier (sinon c'est le début de l'adresse e-mail).
+  function formulaireNom() {
+    const nom = h('input', { value: Synchro.prenom(), maxlength: 60, required: true, autocomplete: 'nickname' });
+    const erreur = h('div', { class: 'erreur', hidden: true });
+    const bouton = h('button', { type: 'submit', class: 'bouton secondaire plein', style: { marginTop: '12px' } }, 'Enregistrer');
+    const valider = async (ev) => {
+      ev.preventDefault();
+      bouton.disabled = true; erreur.hidden = true;
+      try { await Synchro.changerNom(nom.value); App.toast('Nom enregistré.'); App.rendre(); }
+      catch (e) { erreur.hidden = false; erreur.textContent = e.message; }
+      bouton.disabled = false;
+    };
+    return h('form', { onsubmit: valider },
+      h('label', { class: 'champ' }, h('span', {}, 'Affiché dans le journal et sur Telegram'), nom),
+      erreur, bouton);
   }
 
   function formulaireConnexion(accueil = false) {

@@ -82,6 +82,22 @@
     await rejoindre(code);
   }
 
+  // Nom affiché dans le journal (« par … »), la liste des membres et les messages du Jardinier.
+  // Les entrées déjà notées sous l'ancien nom prennent le nouveau.
+  async function changerNom(nom) {
+    nom = nom.trim().slice(0, 60);
+    if (!nom) throw new Error('Écris un nom.');
+    const ancien = prenom(S.auth.record);
+    S.auth.record = await api('PATCH', '/api/collections/users/records/' + moi(), { name: nom });
+    sauverAuth();
+    const fiches = await api('GET', `/api/collections/membres/records?perPage=200&${filtre(`utilisateur='${moi()}'`)}`);
+    await Promise.all(fiches.items.map((m) => api('PATCH', '/api/collections/membres/records/' + m.id, { nom })));
+    if (S.meta) chargerNoms();
+    if (ancien !== nom && App.etat.journal.some((e) => e.par === ancien)) {
+      App.changer((s) => { for (const e of s.journal) if (e.par === ancien) e.par = nom; });
+    }
+  }
+
   // On garde le lien avec le potager : en se reconnectant, la synchronisation reprend là où elle en était
   // (les modifications faites entre-temps partent à ce moment-là).
   function deconnexion() {
@@ -448,6 +464,19 @@
     ];
   }
 
+  function formNom(el) {
+    const nom = h('input', { value: prenom(S.auth.record), maxlength: 60, required: true, autocomplete: 'nickname', 'aria-label': 'Ton nom' });
+    return [
+      h('h3', {}, 'Ton nom'),
+      h('p', { class: 'note' }, 'Affiché dans le journal (« par … »), dans la liste des membres et par le Jardinier sur Telegram.'),
+      formulaire(h('div', { class: 'ligne-champ' }, nom), 'Enregistrer', async () => {
+        await changerNom(nom.value);
+        App.toast('Nom enregistré.');
+        remplir(el);
+      }),
+    ];
+  }
+
   function vueSansJardin(el) {
     const liste = h('div');
     mesJardins().then((js) => {
@@ -466,6 +495,7 @@
     const code = h('input', { value: S.code ? formatCode(S.code) : '', placeholder: 'xxxxx-xxxxx-xxxxx', required: true, 'aria-label': "Code d'invitation" });
     return [
       h('p', {}, 'Connecté : ', h('strong', {}, S.auth.record.email)),
+      formNom(el),
       liste,
       h('h3', {}, 'Mettre mon potager en ligne'),
       h('p', { class: 'note' }, 'Le plan, les graines, le journal et les photos de ce navigateur sont envoyés sur le serveur. Tu pourras ensuite inviter quelqu\'un.'),
@@ -531,6 +561,7 @@
       h('p', {}, 'Potager ', h('strong', {}, `« ${m.nom} »`), ' · connecté : ', S.auth.record.email),
       h('p', { class: 'synchro-texte note' }, texteStatut()),
       h('h3', {}, 'Membres'), membres,
+      formNom(el),
       proprio ? [
         h('h3', {}, 'Inviter quelqu\'un'),
         h('p', { class: 'note' }, "Le code est valable 7 jours. La personne crée son compte dans l'app avec ce code (ou, si elle a déjà un compte, l'utilise dans « Rejoindre un potager »)."),
@@ -572,7 +603,7 @@
     connecte: () => !!(S.auth && S.meta),
     nomJardin: () => S.meta && S.meta.nom,
     // Pour l'appli Android (appli/), qui a ses propres écrans de compte.
-    connexion, mesJardins, lier, deconnexion, texteStatut,
+    connexion, mesJardins, lier, deconnexion, texteStatut, changerNom,
     statut: () => S.statut,
     prenom: () => (S.auth ? prenom(S.auth.record) : null),
     serveur: () => S.serveur,
