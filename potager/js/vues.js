@@ -233,14 +233,17 @@
     const listePlantes = h('datalist', { id: 'dl-plantes' }, PLANTES.map((p) => h('option', { value: p.n })));
     const fPlante = h('input', { list: 'dl-plantes', placeholder: 'Plante (ex. Tomate)', required: true, 'aria-label': 'Plante' });
     const fVariete = h('input', { placeholder: 'Variété (ex. Cœur de bœuf)', 'aria-label': 'Variété' });
-    const fAnnee = h('input', { type: 'number', min: 1990, max: 2100, placeholder: 'Année', class: 'num', 'aria-label': 'Année du sachet' });
+    const fAnnee = h('input', { type: 'number', min: 1990, max: 2100, placeholder: 'Année du sachet', 'aria-label': 'Année du sachet (récolte ou conditionnement)' });
+    const fLimite = h('input', { type: 'number', min: 1990, max: 2100, placeholder: "Valable jusqu'en", 'aria-label': "Valable jusqu'en (date limite du sachet)" });
     const fQte = h('input', { placeholder: 'Quantité (ex. 1 sachet)', 'aria-label': 'Quantité' });
     const ajouter = (e) => {
       e.preventDefault();
       const p = PLANTES.find((x) => normaliser(x.n) === normaliser(fPlante.value)) || PP()[(App.reconnaitre(fPlante.value) || {}).pid];
-      if (!p) { App.toast('Plante non reconnue : choisis-la dans la liste.', true); return; }
-      App.changer((s) => s.graines.push({ id: uid(), pid: p.id, variete: fVariete.value.trim(), annee: +fAnnee.value || null, quantite: fQte.value.trim() }));
-      App.toast(`${p.n} ajouté.`);
+      const nom = fPlante.value.trim();
+      if (!p && !confirm(`« ${nom} » n'est pas dans le catalogue de l'app. L'ajouter quand même ? Elle n'aura pas de dates de semis calculées : suis le sachet.`)) return;
+      const g = p ? { id: uid(), pid: p.id } : { id: uid(), pid: null, texte: nom, horsCatalogue: true };
+      App.changer((s) => s.graines.push(Object.assign(g, { variete: fVariete.value.trim(), annee: +fAnnee.value || null, limite: +fLimite.value || null, quantite: fQte.value.trim() })));
+      App.toast(`${p ? p.n : nom} ajouté.`);
     };
 
     const zoneImport = h('textarea', { rows: 6, placeholder: 'Une graine par ligne, par exemple :\nTomate Cœur de bœuf 2024\nCarottes Nantaise 2023\nCapucine naine\nHaricot vert Contender 2022', 'aria-label': 'Liste de graines à importer' });
@@ -250,7 +253,7 @@
         h('p', { class: 'note' }, "Note tes sachets : l'app te dit quand les semer chez toi, signale les graines trop vieilles et propose tes variétés dans le plan.")),
       h('div', { class: 'deux-blocs' },
         h('section', { class: 'carte' }, h('h2', {}, 'Ajouter une graine'),
-          h('form', { class: 'form-graine', onsubmit: ajouter }, listePlantes, fPlante, fVariete, fAnnee, fQte, h('button', { class: 'bouton primaire', type: 'submit' }, 'Ajouter'))),
+          h('form', { class: 'form-graine', onsubmit: ajouter }, listePlantes, fPlante, fVariete, fAnnee, fLimite, fQte, h('button', { class: 'bouton primaire', type: 'submit' }, 'Ajouter'))),
         h('section', { class: 'carte' }, h('h2', {}, 'Importer une liste'),
           h('p', { class: 'note' }, "Colle ta liste (depuis un tableur, une note…). L'app reconnaît la plante, la variété et l'année."),
           zoneImport,
@@ -261,14 +264,19 @@
           h('input', { type: 'search', placeholder: 'Filtrer…', value: gr.recherche, 'aria-label': 'Filtrer mes graines', oninput: (e) => { gr.recherche = e.target.value; const pos = e.target.selectionStart; App.rendre(); const c = document.querySelector('.tete-tableau input'); c.focus(); c.setSelectionRange(pos, pos); } }),
           h('button', { class: 'bouton petit', onclick: exporterCsv, disabled: !App.etat.graines.length }, '⬇️ Exporter (CSV)')),
         lignes.length ? h('div', { class: 'tableau-defile' }, h('table', { class: 'tableau' },
-          h('thead', {}, h('tr', {}, h('th', {}, 'Plante'), h('th', {}, 'Variété'), h('th', {}, 'Année'), h('th', {}, 'Quantité'), h('th', {}, 'Notes du sachet'), h('th', {}, 'Quand semer chez moi'), h('th', {}, 'Germination'), h('th', {}, ''))),
+          h('thead', {}, h('tr', {}, h('th', {}, 'Plante'), h('th', {}, 'Variété'), h('th', { title: 'Année de récolte ou de conditionnement imprimée sur le sachet' }, 'Année du sachet'), h('th', { title: '« À semer avant » ou « validité » imprimée sur le sachet' }, "Valable jusqu'en"), h('th', {}, 'Quantité'), h('th', {}, 'Notes du sachet'), h('th', {}, 'Quand semer chez moi'), h('th', {}, 'Germination'), h('th', {}, ''))),
           h('tbody', {}, lignes.map(({ g, p, st }) => {
             const eg = App.etatGraine(g);
             return h('tr', {},
-              h('td', {}, p ? h('button', { class: 'lien', onclick: () => Vues.fichePlante(p.id) }, App.icone(p), ' ', p.n) : h('select', { class: 'a-corriger', 'aria-label': 'Choisir la plante', title: "Plante absente du catalogue de l'app : pas de calendrier pour elle. Si elle y est sous un autre nom, choisis-la.", onchange: (e) => App.changer(() => { g.pid = e.target.value; }) },
-                h('option', { value: '' }, `❓ ${g.texte || 'Inconnue'}`), PLANTES.map((x) => h('option', { value: x.id }, x.n)))),
+              h('td', {}, p ? h('button', { class: 'lien', onclick: () => Vues.fichePlante(p.id) }, App.icone(p), ' ', p.n)
+                // Plante volontairement hors catalogue (fleur d'ornement…) : son nom et son icône.
+                : g.horsCatalogue ? h('span', { title: "Plante absente du catalogue de l'app : elle suit les dates retenues pour ce sachet, ou à défaut celles du sachet." }, App.icone(App.planteGraine(g)), ' ', g.texte, h('div', { class: 'sous' }, 'hors catalogue'))
+                // Ligne d'import non reconnue : choisir la plante.
+                : h('select', { class: 'a-corriger', 'aria-label': 'Choisir la plante', title: "Plante non reconnue : choisis-la dans la liste.", onchange: (e) => App.changer(() => { g.pid = e.target.value; }) },
+                  h('option', { value: '' }, `❓ ${g.texte || 'Inconnue'}`), PLANTES.map((x) => h('option', { value: x.id }, x.n)))),
               h('td', {}, h('input', { class: 'cellule', value: g.variete || '', 'aria-label': 'Variété', onchange: (e) => App.changer(() => { g.variete = e.target.value.trim(); }, false) })),
-              h('td', {}, h('input', { class: 'cellule num', type: 'number', value: g.annee || '', 'aria-label': 'Année', onchange: (e) => App.changer(() => { g.annee = +e.target.value || null; }) })),
+              h('td', {}, h('input', { class: 'cellule num', type: 'number', value: g.annee || '', 'aria-label': 'Année du sachet', onchange: (e) => App.changer(() => { g.annee = +e.target.value || null; }) })),
+              h('td', {}, h('input', { class: 'cellule num', type: 'number', value: g.limite || '', 'aria-label': "Valable jusqu'en", onchange: (e) => App.changer(() => { g.limite = +e.target.value || null; }) })),
               h('td', {}, h('input', { class: 'cellule', value: g.quantite || '', 'aria-label': 'Quantité', onchange: (e) => App.changer(() => { g.quantite = e.target.value.trim(); }, false) })),
               h('td', {}, h('input', { class: 'cellule notes', value: g.notes || '', title: g.notes || '', 'aria-label': 'Notes du sachet', onchange: (e) => App.changer(() => { g.notes = e.target.value.trim(); }, false) })),
               h('td', { title: g.periodes && g.periodes.length ? "📦 Dates retenues pour ce sachet (sachet comparé à d'autres sources pour ton lieu), à la place du calcul de l'app" : null },
@@ -305,8 +313,8 @@
 
   function exporterCsv() {
     const esc = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`;
-    const lignes = [['Plante', 'Variété', 'Année', 'Quantité', 'Notes'].join(';'),
-      ...App.etat.graines.map((g) => [(PP()[g.pid] || {}).n || g.texte, g.variete, g.annee, g.quantite, g.notes].map(esc).join(';'))];
+    const lignes = [['Plante', 'Variété', 'Année du sachet', "Valable jusqu'en", 'Quantité', 'Notes'].join(';'),
+      ...App.etat.graines.map((g) => [(PP()[g.pid] || {}).n || g.texte, g.variete, g.annee, g.limite, g.quantite, g.notes].map(esc).join(';'))];
     U.telecharger('mes-graines.csv', '﻿' + lignes.join('\n'), 'text/csv');
   }
 

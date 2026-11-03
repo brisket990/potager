@@ -119,7 +119,14 @@
 
   // ---------- Graines ----------
   App.grainesDe = (pid) => App.etat.graines.filter((g) => g.pid === pid);
+  // `annee` = année du sachet (récolte ou conditionnement) ; `limite` = « à semer avant » / « validité » imprimée sur le sachet.
   App.etatGraine = (g) => {
+    if (g.limite) {
+      const reste = g.limite - new Date().getFullYear();
+      if (reste < 0) return { niveau: 'vieille', texte: `Date du sachet dépassée (${g.limite}) : faire un test de germination` };
+      if (reste === 0) return { niveau: 'limite', texte: `Dernière année d'après le sachet (${g.limite})` };
+      return { niveau: 'ok', texte: `Valable jusqu'en ${g.limite} d'après le sachet` };
+    }
     const p = PLANTES_PAR_ID[g.pid];
     if (!p || !p.germ || !g.annee) return null;
     const age = new Date().getFullYear() - g.annee;
@@ -127,8 +134,9 @@
     if (age === p.germ) return { niveau: 'limite', texte: `Dernière année de bonne germination (${p.germ} ans)` };
     return { niveau: 'ok', texte: `Bonne germination jusqu'en ${g.annee + p.germ}` };
   };
-  // Plante d'une graine ; pour une graine hors catalogue (`texte` sans `pid` connu), une plante minimale à son nom.
-  App.planteGraine = (g) => PLANTES_PAR_ID[g.pid] || { id: 'graine-' + g.id, n: g.texte || 'Graine', ic: '🌱' };
+  // Plante d'une graine ; pour une graine hors catalogue (`texte` sans `pid` connu), une plante minimale à son nom,
+  // avec l'icône (`ic`) et la catégorie (`cat`) données à l'ajout.
+  App.planteGraine = (g) => PLANTES_PAR_ID[g.pid] || { id: 'graine-' + g.id, n: g.texte || 'Graine', ic: g.ic || '🌱', cat: g.cat };
   // Dates retenues pour une graine (sachet comparé à d'autres sources pour ce lieu) : `periodes` = [{ type, du: 'MM-JJ', au: 'MM-JJ' }],
   // qui remplacent le calcul de l'app pour cette graine. Renvoie les périodes qui touchent [debut, fin], comme Calendrier.actions.
   App.periodesGraine = (g, debut, fin) => {

@@ -96,7 +96,7 @@ const texteStatut = (p, st) => (st.maintenant.length
   : st.prochain ? `${Calendrier.libelle(st.prochain.type, p).toLowerCase()} à partir du ${fmtDate(st.prochain.debut)}` : 'pas de fenêtre de semis chez toi');
 const avecPeriodes = (g) => !!(g.periodes && g.periodes.length);
 const jourMois = (mmjj) => { const [m, j] = mmjj.split('-').map(Number); return `${j}/${String(m).padStart(2, '0')}`; };
-const textePeriodes = (g, p) => g.periodes.map((x) => `${x.type === 'rec' && !PP[g.pid] ? 'récolte ou floraison' : Calendrier.libelle(x.type, p).toLowerCase()} du ${jourMois(x.du)} au ${jourMois(x.au)}`).join(', ');
+const textePeriodes = (g, p) => g.periodes.map((x) => `${x.type === 'rec' && !PP[g.pid] && !g.cat ? 'récolte ou floraison' : Calendrier.libelle(x.type, p).toLowerCase()} du ${jourMois(x.du)} au ${jourMois(x.au)}`).join(', ');
 function lirePeriodes(l) {
   if (l == null) return l;
   return l.map((x) => {
@@ -104,6 +104,20 @@ function lirePeriodes(l) {
     if (!ok) throw new Error(`Période invalide : ${JSON.stringify(x)}. Attendu { type: si|sd|pl|rec, du: "MM-JJ", au: "MM-JJ" }.`);
     return { type: x.type, du: x.du, au: x.au };
   });
+}
+// Champs d'un sachet communs à ajouter_graines et modifier_graine.
+const CHAMPS_SACHET = {
+  annee: { type: 'integer', description: "Année du sachet : récolte ou conditionnement (« récolte 2025 », « lot 2025 »). Pas la date limite." },
+  limite: { type: 'integer', description: "Année jusqu'à laquelle le sachet est valable : « à semer avant », « validité », « DLUO »." },
+  quantite: { type: 'string', description: 'Ex. « 1 sachet », « 50 graines », « 2 g ».' },
+  notes: { type: 'string', description: 'Indications du sachet utiles plus tard : période de semis, profondeur, particularités, sources des dates retenues.' },
+  icone: { type: 'string', description: 'Plante hors catalogue seulement : un emoji qui la représente (ex. 🌸 pour une fleur, 🌻 tournesol, 🌿 herbe).' },
+  categorie: { type: 'string', enum: Object.keys(CATEGORIES), description: 'Plante hors catalogue seulement : sa catégorie (fleur → « floraison » au lieu de « récolte »).' },
+};
+function majHorsCatalogue(g, s) {
+  if (s.icone && s.icone.trim()) g.ic = [...new Intl.Segmenter().segment(s.icone.trim())][0].segment; // un seul emoji
+  if (s.categorie && CATEGORIES[s.categorie]) g.cat = s.categorie;
+  g.horsCatalogue = true;
 }
 const PERIODES = { type: 'array', description: "Dates retenues pour ce sachet à Drancy (ou au lieu du potager), après comparaison du sachet avec le calendrier de l'app et d'autres sources. Elles remplacent le calcul de l'app pour cette graine. Types : si = semis à l'abri, sd = semis en place, pl = plantation / mise en place, rec = récolte ou floraison. Dates « MM-JJ », sans année (une période peut passer le 31 décembre).",
   items: { type: 'object', properties: { type: { type: 'string', enum: ['si', 'sd', 'pl', 'rec'] }, du: { type: 'string', pattern: '^\\d{2}-\\d{2}$' }, au: { type: 'string', pattern: '^\\d{2}-\\d{2}$' } }, required: ['type', 'du', 'au'] } };
@@ -296,7 +310,8 @@ outil('lister_graines',
       .map((g) => {
         const p = PP[g.pid], plante = App.planteGraine(g);
         const eg = App.etatGraine(g);
-        return `${p ? p.n : `${g.texte || '?'} (hors catalogue de l'app)`}${g.variete ? ` – ${g.variete}` : ''}${g.annee ? ` – ${g.annee}` : ''}${g.quantite ? ` – ${g.quantite}` : ''}` +
+        return `${p ? p.n : `${g.ic ? g.ic + ' ' : ''}${g.texte || '?'} (hors catalogue de l'app${g.cat ? `, ${(CATEGORIES[g.cat] || g.cat).toLowerCase()}` : ''})`}${g.variete ? ` – ${g.variete}` : ''}` +
+          `${g.annee ? ` – sachet de ${g.annee}` : ''}${g.quantite ? ` – ${g.quantite}` : ''}` + // la date limite est dans l'état de germination
           (g.notes ? ` – notes : ${g.notes}` : '') + (eg ? ` – ${eg.texte}` : '') +
           (avecPeriodes(g) ? ` – dates retenues : ${textePeriodes(g, plante)}` : '') +
           (p || avecPeriodes(g) ? ` – ${texteStatut(plante, statutSemis(plante, g))}` : ' – pas de dates : se fier au sachet') + ` [id ${g.id}]`;
@@ -305,13 +320,11 @@ outil('lister_graines',
   });
 
 outil('ajouter_graines',
-  "Ajoute des graines au stock (par exemple après avoir lu des photos de sachets). Pour chaque sachet, donner la plante et si possible la variété, l'année (date limite ou année de récolte du sachet), la quantité et les indications utiles du sachet. Si un sachet identique existe déjà (même plante, variété et année), il est mis à jour au lieu d'être doublé. Une plante absente du catalogue de l'app (fleur d'ornement, plante rare…) est quand même ajoutée sous son nom, sans calendrier ni durée de germination. `periodes` : les dates retenues avec l'utilisateur pour ce sachet (après comparaison du sachet, de fiche_plante et de recherches), qui remplacent le calcul de l'app.",
+  "Ajoute des graines au stock (par exemple après avoir lu des photos de sachets). Pour chaque sachet, donner la plante et si possible la variété, l'année du sachet et/ou sa date limite, la quantité et les indications utiles du sachet. Si un sachet identique existe déjà (même plante, variété et années), il est mis à jour au lieu d'être doublé. Une plante absente du catalogue de l'app (fleur d'ornement, plante rare…) est quand même ajoutée sous son nom, sans calendrier ni durée de germination : lui donner une `icone` et une `categorie`. `periodes` : les dates retenues avec l'utilisateur pour ce sachet (après comparaison du sachet, de fiche_plante et de recherches), qui remplacent le calcul de l'app.",
   { graines: { type: 'array', minItems: 1, items: { type: 'object', properties: {
     plante: { type: 'string', description: 'Nom de la plante (ex. « Tomate », « Haricot nain »).' },
     variete: { type: 'string' },
-    annee: { type: 'integer', description: 'Année du sachet (récolte ou date limite).' },
-    quantite: { type: 'string', description: 'Ex. « 1 sachet », « 50 graines », « 2 g ».' },
-    notes: { type: 'string', description: 'Indications du sachet utiles plus tard : période de semis, profondeur, particularités.' },
+    ...CHAMPS_SACHET,
     periodes: PERIODES,
   }, required: ['plante'] } } }, ['graines'],
   async (pg, { graines }) => {
@@ -325,19 +338,21 @@ outil('ajouter_graines',
         const nom = p ? p.n : texte;
         const variete = (s.variete || '').trim();
         const existante = etat.graines.find((g) => (p ? g.pid === p.id : !PP[g.pid] && normaliser(g.texte || '') === normaliser(texte)) &&
-          normaliser(g.variete || '') === normaliser(variete) && (g.annee || null) === (s.annee || null));
+          normaliser(g.variete || '') === normaliser(variete) && (g.annee || null) === (s.annee || null) && (g.limite || null) === (s.limite || null));
         if (existante) {
           if (s.quantite) existante.quantite = s.quantite;
           if (s.notes) existante.notes = s.notes;
           if (s.periodes && s.periodes.length) existante.periodes = s.periodes;
+          if (!p) majHorsCatalogue(existante, s);
           majs.push(`${nom}${variete ? ` ${variete}` : ''}`);
         } else {
-          const g = p ? { id: uid(), pid: p.id } : { id: uid(), pid: null, texte };
-          Object.assign(g, { variete, annee: s.annee || null, quantite: s.quantite || '' });
+          const g = p ? { id: uid(), pid: p.id } : { id: uid(), pid: null, texte, horsCatalogue: true };
+          Object.assign(g, { variete, annee: s.annee || null, limite: s.limite || null, quantite: s.quantite || '' });
           if (s.notes) g.notes = s.notes;
           if (s.periodes && s.periodes.length) g.periodes = s.periodes;
+          if (!p) majHorsCatalogue(g, s);
           etat.graines.push(g);
-          ajoutees.push(`${nom}${variete ? ` ${variete}` : ''}${s.annee ? ` ${s.annee}` : ''} [id ${g.id}]`);
+          ajoutees.push(`${nom}${variete ? ` ${variete}` : ''}${s.annee ? ` (sachet de ${s.annee})` : ''}${s.limite ? ` (valable jusqu'en ${s.limite})` : ''} [id ${g.id}]`);
           if (!p) horsCatalogue.push(nom);
         }
       }
@@ -345,22 +360,24 @@ outil('ajouter_graines',
     });
     return [`Ajoutées (${res.ajoutees.length}) :\n${liste(res.ajoutees, '(aucune)')}`,
       res.majs.length ? `Déjà en stock, mises à jour : ${res.majs.join(', ')}` : null,
-      res.horsCatalogue.length ? `Hors catalogue de l'app (ajoutées sous leur nom, sans calendrier ni suivi de germination ; se fier au sachet) : ${res.horsCatalogue.join(', ')}.` : null].filter(Boolean).join('\n');
+      res.horsCatalogue.length ? `Hors catalogue de l'app (ajoutées sous leur nom, sans calcul de dates ni durée de germination : elles suivent les dates retenues ou le sachet) : ${res.horsCatalogue.join(', ')}.` : null].filter(Boolean).join('\n');
   });
 
 outil('modifier_graine',
-  "Corrige une graine du stock (id donné par lister_graines) : plante, variété, année, quantité, notes ou dates retenues (periodes ; [] ou null pour revenir au calcul de l'app). Ne donner que les champs à changer.",
-  { id: { type: 'string' }, plante: { type: 'string' }, variete: { type: 'string' }, annee: { type: ['integer', 'null'] }, quantite: { type: 'string' }, notes: { type: 'string' }, periodes: { ...PERIODES, type: ['array', 'null'] } }, ['id'],
+  "Corrige une graine du stock (id donné par lister_graines) : plante, variété, année du sachet, date limite, quantité, notes, icône et catégorie (hors catalogue) ou dates retenues (periodes ; [] ou null pour revenir au calcul de l'app). Ne donner que les champs à changer ; null efface une année.",
+  { id: { type: 'string' }, plante: { type: 'string' }, variete: { type: 'string' }, ...CHAMPS_SACHET,
+    annee: { ...CHAMPS_SACHET.annee, type: ['integer', 'null'] }, limite: { ...CHAMPS_SACHET.limite, type: ['integer', 'null'] }, periodes: { ...PERIODES, type: ['array', 'null'] } }, ['id'],
   async (pg, { id, plante, ...champs }) => {
     const p = plante ? exigePlante(plante) : null;
     const periodes = lirePeriodes(champs.periodes);
     return pg.modifier((etat) => {
       const g = etat.graines.find((x) => x.id === id);
       if (!g) throw new Error(`Aucune graine avec l'id ${id}.`);
-      if (p) { g.pid = p.id; delete g.texte; }
-      for (const k of ['variete', 'annee', 'quantite', 'notes']) if (champs[k] !== undefined) g[k] = champs[k];
+      if (p) { g.pid = p.id; for (const k of ['texte', 'horsCatalogue', 'ic', 'cat']) delete g[k]; }
+      for (const k of ['variete', 'annee', 'limite', 'quantite', 'notes']) if (champs[k] !== undefined) g[k] = champs[k];
+      if (!PP[g.pid]) majHorsCatalogue(g, champs);
       if (periodes !== undefined) { if (periodes && periodes.length) g.periodes = periodes; else delete g.periodes; }
-      return `Graine mise à jour : ${(PP[g.pid] || {}).n || g.texte}${g.variete ? ` ${g.variete}` : ''}${g.annee ? ` ${g.annee}` : ''}.`;
+      return `Graine mise à jour : ${(PP[g.pid] || {}).n || g.texte}${g.variete ? ` ${g.variete}` : ''}${g.annee ? `, sachet de ${g.annee}` : ''}${g.limite ? `, valable jusqu'en ${g.limite}` : ''}.`;
     });
   });
 
