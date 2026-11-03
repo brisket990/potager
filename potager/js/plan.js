@@ -104,6 +104,7 @@
     svg.addEventListener('pointerup', surRelache);
     svg.addEventListener('pointercancel', surRelache);
     svg.addEventListener('pointerleave', () => { survol.hidden = true; });
+    svg.addEventListener('mousedown', (e) => { if (e.button === 1) e.preventDefault(); }); // pas de défilement automatique du navigateur
     svg.addEventListener('wheel', surMolette, { passive: false });
 
     survol = h('div', { class: 'info-survol', hidden: true });
@@ -128,12 +129,12 @@
   function aideOutil() {
     if (ed.outil === 'plante') {
       const p = PLANTES_PAR_ID[ed.pid];
-      return `${p.ic} ${p.n} : clique pour un plant, ou trace un rectangle pour une zone. ` +
+      return `${p.ic} ${p.n} : clique pour un plant, ou trace un rectangle pour une zone (Maj enfoncée pour en poser plusieurs à la suite). ` +
         (App.soleil ? 'Passe la souris pour le soleil à chaque endroit. ' : 'Calcule l\'ensoleillement (bouton Soleil) pour voir où elle sera bien exposée. ') +
         'Zones rouges hachurées = même famille ces 3 dernières années. Échap pour arrêter.';
     }
     if (STRUCTURES[ed.outil]) return `Trace un rectangle (ou clique) pour ajouter : ${STRUCTURES[ed.outil].n}.`;
-    return 'Glisse un objet pour le déplacer, son coin pour le redimensionner. Glisse le fond pour te déplacer, molette pour zoomer.';
+    return 'Glisse un objet pour le déplacer, son coin pour le redimensionner. Glisse le fond (ou molette enfoncée) pour te déplacer, molette pour zoomer.';
   }
 
   function defs() {
@@ -543,9 +544,11 @@
   }
 
   function surAppui(e) {
-    if (e.button === 1 || e.button === 2) return;
-    const pt = point(e);
+    if (e.button === 2) return;
     try { svg.setPointerCapture(e.pointerId); } catch { /* pointeur déjà relâché */ }
+    // Molette enfoncée : déplacer le plan, quel que soit l'outil.
+    if (e.button === 1) { e.preventDefault(); geste = { type: 'pan', ecran: [e.clientX, e.clientY], v0: { ...ed.vue } }; return; }
+    const pt = point(e);
     const poignee = e.target.closest('[data-poignee]');
     const poigneeRot = e.target.closest('[data-rotation]');
     const cible = e.target.closest('[data-id]');
@@ -607,7 +610,7 @@
     dessiner();
   }
 
-  function surRelache() {
+  function surRelache(e) {
     if (!geste) return;
     const g = geste;
     geste = null;
@@ -636,7 +639,8 @@
       }
       objets().push(o);
       ed.sel = o.id;
-      if (ed.outil !== 'plante') { ed.outil = 'select'; rendrePalette(); svg.style.cursor = 'default'; }
+      // Retour à la sélection (pour déplacer le plan ou l'objet posé) ; Maj enfoncée : on garde la plante pour en poser d'autres.
+      if (ed.outil !== 'plante' || !(e && e.shiftKey)) { ed.outil = 'select'; ed.pid = null; rendrePalette(); svg.style.cursor = 'default'; }
       enregistrer();
       rendrePanneau();
       const aide = svg.parentNode.querySelector('.aide-plan');
