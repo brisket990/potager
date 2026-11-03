@@ -16,12 +16,13 @@ install -D -m 755 "$DEPOT/agent/hermes/potager-node" "$HOME/.local/bin/potager-n
 echo "3. Profil Hermes « $PROFIL » (copie des réglages du modèle depuis « proxmox », sans ses bots ni sa mémoire)"
 if [ ! -d "$P" ]; then "$HERMES" profile create "$PROFIL" --clone-from proxmox --description "Jardinier du potager familial"; fi
 
-echo "4. Personnalité, compétence « potager » et script d'alertes"
+echo "4. Personnalité, compétence « potager », scripts d'alertes et du journal"
 cp "$DEPOT/agent/hermes/SOUL.md" "$P/SOUL.md"
 mkdir -p "$P/skills/jardin"
 rm -rf "$P/skills/jardin/potager"
 cp -r "$DEPOT/agent/hermes/skills/potager" "$P/skills/jardin/"
 install -D -m 755 "$DEPOT/agent/hermes/alertes.sh" "$P/scripts/potager-alertes.sh"
+install -D -m 755 "$DEPOT/agent/hermes/journal.sh" "$P/scripts/potager-journal.sh"
 
 echo "5. Outils du potager (serveur MCP)"
 if ! "$HERMES" -p "$PROFIL" mcp list 2>/dev/null | grep -q potager; then
@@ -32,13 +33,18 @@ fi
 echo "6. Dossier des livres : ~/potager-livres"
 mkdir -p "$HOME/potager-livres"
 
-echo "7. Tâches planifiées : alertes (toutes les heures) et point du lundi 8 h, à l'heure de Paris"
+echo "7. Tâches planifiées : alertes (toutes les heures), journal (toutes les 5 minutes) et point du lundi 8 h, à l'heure de Paris"
 "$HERMES" -p "$PROFIL" config set timezone Europe/Paris
 JOBS=$("$HERMES" -p "$PROFIL" cron list 2>/dev/null || true)
 if ! echo "$JOBS" | grep -q "Alertes du potager"; then
   # Le message d'échec éventuel reste dans « hermes cron list » : pas de notification toutes les heures.
   "$HERMES" -p "$PROFIL" cron create "every 1h" "$(cat "$DEPOT/agent/hermes/consigne-alertes.md")" \
     --name "Alertes du potager" --monitor-script potager-alertes.sh --deliver telegram --failure-deliver local
+fi
+if ! echo "$JOBS" | grep -q "Journal du potager"; then
+  # Nouvelles entrées du site ou de l'appli, transmises au groupe avec leurs photos.
+  "$HERMES" -p "$PROFIL" cron create "every 5m" "$(cat "$DEPOT/agent/hermes/consigne-journal.md")" \
+    --name "Journal du potager" --monitor-script potager-journal.sh --deliver telegram --failure-deliver local
 fi
 if ! echo "$JOBS" | grep -q "Point du lundi"; then
   "$HERMES" -p "$PROFIL" cron create "0 8 * * 1" "$(cat "$DEPOT/agent/hermes/consigne-lundi.md")" \

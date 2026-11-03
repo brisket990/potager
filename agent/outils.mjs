@@ -465,13 +465,16 @@ outil('noter_journal',
       const e = { id: uid(), date: jour, type, pid: p ? p.id : null, note: note.trim(), photos: cles };
       if (type === 'recolte' && quantite) { e.qte = quantite; e.unite = unite || 'kg'; }
       if (par) e.par = par;
+      e.via = 'jardinier'; // déjà dit sur Telegram : la surveillance du journal ne la renvoie pas au groupe
       etat.journal.push(e);
       return `Noté au journal le ${fmtDateLongue(lireIso(jour))} : ${TYPES_JOURNAL[type]}${p ? ` – ${p.n}` : ''}${e.qte ? ` – ${e.qte} ${e.unite}` : ''}${e.note ? ` – ${e.note}` : ''}${cles.length ? ` (${cles.length} photo(s))` : ''}. [id ${e.id}]`;
     });
   });
 
+export const texteEntree = (e) => `${fmtDate(lireIso(e.date))} ${e.date.slice(0, 4)} – ${TYPES_JOURNAL[e.type] || e.type}${e.pid && PP[e.pid] ? ` – ${PP[e.pid].n}` : ''}${e.qte ? ` – ${e.qte} ${e.unite}` : ''}${e.note ? ` – ${e.note}` : ''}${e.par ? ` (par ${e.par})` : ''}${(e.photos || []).length ? ` – ${e.photos.length} photo(s)` : ''}`;
+
 outil('lire_journal',
-  "Lit le journal du jardin, des plus récentes aux plus anciennes entrées, avec filtres facultatifs.",
+  "Lit le journal du jardin, des plus récentes aux plus anciennes entrées, avec filtres facultatifs. Pour voir les photos d'une entrée : photos_journal.",
   { annee: { type: 'integer' }, type: { type: 'string', enum: Object.keys(TYPES_JOURNAL) }, plante: { type: 'string' }, limite: { type: 'integer', minimum: 1, maximum: 200, description: '30 par défaut.' } }, [],
   async (pg, { annee, type, plante, limite = 30 }) => {
     await pg.lire();
@@ -479,8 +482,29 @@ outil('lire_journal',
     const l = App.etat.journal
       .filter((e) => (!annee || e.date.startsWith(String(annee))) && (!type || e.type === type) && (!p || e.pid === p.id))
       .sort((a, b) => b.date.localeCompare(a.date)).slice(0, limite)
-      .map((e) => `${fmtDate(lireIso(e.date))} ${e.date.slice(0, 4)} – ${TYPES_JOURNAL[e.type] || e.type}${e.pid && PP[e.pid] ? ` – ${PP[e.pid].n}` : ''}${e.qte ? ` – ${e.qte} ${e.unite}` : ''}${e.note ? ` – ${e.note}` : ''}${e.par ? ` (par ${e.par})` : ''}${(e.photos || []).length ? ` – ${e.photos.length} photo(s)` : ''} [id ${e.id}]`);
+      .map((e) => `${texteEntree(e)} [id ${e.id}]`);
     return liste(l, 'Aucune entrée.');
+  });
+
+outil('photos_journal',
+  "Montre les photos d'une entrée du journal (ajoutées sur le site, l'appli ou Telegram), pour les regarder (maladie, ravageur, récolte…) ou les renvoyer au groupe.",
+  { id: { type: 'string', description: "Identifiant de l'entrée (donné par lire_journal)." } }, ['id'],
+  async (pg, { id }) => {
+    await pg.lire();
+    const e = App.etat.journal.find((x) => x.id === id);
+    if (!e) throw new Error(`Aucune entrée du journal avec l'id ${id}.`);
+    const cles = e.photos || [];
+    const images = [];
+    for (const cle of cles) {
+      const ph = await pg.photo(cle);
+      if (ph) images.push({ type: 'image', data: ph.donnees.toString('base64'), mimeType: ph.type });
+    }
+    const manque = cles.length - images.length;
+    return {
+      texte: `${texteEntree(e)}\n` + (!cles.length ? "Cette entrée n'a pas de photo."
+        : `${images.length} photo(s) ci-jointe(s).${manque ? ` ${manque} photo(s) pas (encore) sur le serveur : envoyée(s) depuis un appareil hors ligne ?` : ''}`),
+      images,
+    };
   });
 
 outil('bilan',
@@ -562,8 +586,7 @@ outil('point_de_la_semaine',
       return null;
     }).filter(Boolean);
     const depuis = isoDate(ajouterJours(aujourdhui(), -7));
-    const passe = App.etat.journal.filter((e) => e.date >= depuis).sort((a, b) => a.date.localeCompare(b.date))
-      .map((e) => `${fmtDate(lireIso(e.date))} – ${TYPES_JOURNAL[e.type] || e.type}${e.pid && PP[e.pid] ? ` – ${PP[e.pid].n}` : ''}${e.qte ? ` – ${e.qte} ${e.unite}` : ''}${e.note ? ` – ${e.note}` : ''}${e.par ? ` (par ${e.par})` : ''}`);
+    const passe = App.etat.journal.filter((e) => e.date >= depuis).sort((a, b) => a.date.localeCompare(b.date)).map(texteEntree);
     return [afaire, `\n${meteoTxt}`, `\nAlertes :\n${alertes}`,
       `\nGraines et plants à prévoir pour le plan ${saisonCourante()} :\n${liste(besoins, plan ? '(tout est en stock)' : '(pas encore de plan pour cette saison)')}`,
       `\nAu journal ces 7 derniers jours :\n${liste(passe, '(rien de noté)')}`].join('\n');

@@ -18,6 +18,7 @@ Aucune dépendance : Node.js 20 ou plus suffit.
 | `lister_graines` / `ajouter_graines` / `modifier_graine` / `retirer_graine` | Stock de graines : notes du sachet, année et date de validité, dates retenues pour le sachet |
 | `fiche_plante_perso` | Crée ou corrige une plante perso (absente du catalogue) : fiche et calendrier fixe, pour le plan, le calendrier et les alertes |
 | `noter_journal` / `lire_journal` / `bilan` | Journal (avec auteur et photos) et bilan des récoltes |
+| `photos_journal` | Photos d'une entrée du journal, renvoyées en images MCP : l'agent les voit, et Hermes lui donne des lignes `MEDIA:` pour les joindre à un message |
 | `chercher_dans_les_livres` / `livres` | Passages des livres de jardinage de la famille, avec titre, auteur et chapitre |
 | `alertes` | Gel, forte chaleur, manque d'eau, orage des 3 prochains jours, seulement pour les cultures en terre |
 | `point_de_la_semaine` | Tout pour le point du lundi : à faire, météo, alertes, graines à prévoir, semaine passée |
@@ -44,6 +45,8 @@ Calcul dans `alertes.mjs`, sans IA : météo Open-Meteo (7 jours passés, 4 à v
 - Orage (grêle) : dans les 2 jours.
 
 `node agent/potager-mcp.mjs surveiller` affiche les alertes avec un identifiant stable (`[gel:2027-05-12] …`). Dans Hermes, une tâche planifiée en mode surveillance (`--monitor-script`, script `hermes/alertes.sh`, consigne `hermes/consigne-alertes.md`) ne réveille l'agent que si cette sortie change ; l'agent ne prévient que pour les nouveaux identifiants. Rien n'est envoyé la nuit (22 h – 7 h). Le point du lundi est une tâche planifiée classique avec `hermes/consigne-lundi.md`.
+
+`node agent/potager-mcp.mjs journal` affiche les nouvelles entrées du journal écrites sur le site ou l'appli (`[journal:id] …`), puis répète la même sortie tant que rien de nouveau n'arrive. Dans Hermes, la tâche « Journal du potager » (toutes les 5 minutes, script `hermes/journal.sh`, consigne `hermes/consigne-journal.md`) réveille alors l'agent, qui regarde les photos (`photos_journal`) et poste l'entrée dans le groupe avec les photos et son avis. Le script laisse de côté les entrées notées par le Jardinier lui-même (champ `via: 'jardinier'`, elles viennent déjà de Telegram). Il attend jusqu'à 30 minutes les photos qui ne sont pas encore sur le serveur, et garde pour le matin ce qui arrive la nuit. Au premier passage, il prend tout le journal existant comme déjà vu. Sur un import en masse, il ne montre que les 5 entrées les plus récentes. Son état est dans `~/.cache/potager-agent/journal-surveillance.json`.
 
 Chaque modification relit le potager, l'applique et l'envoie avec la version suivante ; si quelqu'un a enregistré entre-temps, le serveur refuse et l'outil recommence sur l'état à jour (voir `pocketbase/pb_hooks/versions.pb.js`). Les changements apparaissent en direct dans l'app.
 

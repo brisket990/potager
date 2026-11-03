@@ -166,4 +166,23 @@ export class Potager {
     await this.api('POST', '/api/collections/photos/records', undefined, f);
     return cle;
   }
+
+  // Fiche d'une photo du journal sur le serveur (null si elle n'y est pas encore : l'envoi depuis un téléphone
+  // peut arriver après l'entrée du journal).
+  async trouverPhoto(cle) {
+    if (!/^\w+$/.test(cle)) return null;
+    const jardin = this.jardin ? this.jardin.id : await this.idJardin();
+    const filtre = encodeURIComponent(`jardin='${jardin}' && cle='${cle}'`);
+    return (await this.api('GET', `/api/collections/photos/records?perPage=1&filter=${filtre}`)).items[0] || null;
+  }
+
+  // Photo du journal : { donnees (Buffer), type } ; null si elle n'est pas sur le serveur.
+  async photo(cle) {
+    const rec = await this.trouverPhoto(cle);
+    if (!rec) return null;
+    const { token } = await this.api('POST', '/api/files/token');
+    const r = await fetch(`${this.config.serveur}/api/files/photos/${rec.id}/${encodeURIComponent(rec.fichier)}?token=${token}`);
+    if (!r.ok) return null;
+    return { donnees: Buffer.from(await r.arrayBuffer()), type: TYPES_IMAGE[extname(rec.fichier).toLowerCase()] || 'image/jpeg' };
+  }
 }

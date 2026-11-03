@@ -523,6 +523,7 @@
         }
         const e = { id: uid(), date: fDate.value, type: fType.value, pid: fPlante.value || null, note: fNote.value.trim(), photos: ids };
         if (fType.value === 'recolte' && fQte.value) { e.qte = +fQte.value; e.unite = fUnite.value; }
+        if (Synchro.prenom()) e.par = Synchro.prenom(); // le Jardinier dit qui a noté quand il transmet au groupe
         jo.annee = +fDate.value.slice(0, 4);
         App.changer((s) => s.journal.push(e));
         App.toast('Entrée ajoutée au journal.');

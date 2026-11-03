@@ -5,6 +5,7 @@
  *   node agent/potager-mcp.mjs inscription         crée le compte du jardinier avec un code d'invitation
  *   node agent/potager-mcp.mjs outil <nom> [json]  lance un outil à la main (essais, scripts)
  *   node agent/potager-mcp.mjs surveiller          alertes du moment, pour une tâche planifiée en mode surveillance
+ *   node agent/potager-mcp.mjs journal             nouvelles entrées du journal, pour une tâche planifiée en mode surveillance
  *   node agent/potager-mcp.mjs bibliotheque [dir]  (ré)indexe les livres (EPUB, TXT, MD) de ~/potager-livres
  *
  * Aucune dépendance : seulement Node.js 20 ou plus. */
@@ -13,7 +14,7 @@ import { randomBytes } from 'node:crypto';
 import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { Potager, lireConfig, ecrireConfig, FICHIER_CONFIG, CACHE } from './noyau.mjs';
-import { OUTILS, alertesDuMoment } from './outils.mjs';
+import { OUTILS, alertesDuMoment, texteEntree } from './outils.mjs';
 import { texteAlertes } from './alertes.mjs';
 import { indexer, DOSSIER_LIVRES } from './bibliotheque.mjs';
 
@@ -46,7 +47,11 @@ function serveurMcp() {
     if (method === 'tools/list') return ok({ tools: OUTILS.map(({ name, description, inputSchema }) => ({ name, description, inputSchema })) });
     if (method === 'tools/call') {
       file = file.then(async () => {
-        try { ok({ content: [{ type: 'text', text: await appeler(params.name, params.arguments || {}) }] }); }
+        try {
+          // Un outil renvoie un texte, ou { texte, images } (photos du journal, en blocs image MCP).
+          const r = await appeler(params.name, params.arguments || {});
+          ok({ content: typeof r === 'string' ? [{ type: 'text', text: r }] : [{ type: 'text', text: r.texte }, ...r.images] });
+        }
         catch (e) { ok({ content: [{ type: 'text', text: e.message }], isError: true }); }
       });
       return;
@@ -110,11 +115,54 @@ async function surveiller() {
   console.log(texte);
 }
 
+// Nouvelles entrées du journal, ajoutées sur le site ou l'appli : le Jardinier les transmet au groupe.
+// La sortie liste les entrées de ce passage ; sans nouveauté (ou la nuit, ou en cas d'erreur), elle répète
+// la précédente et Hermes ne réveille pas l'agent. Les entrées notées par le Jardinier lui-même sont sautées.
+const ATTENTE_PHOTOS = 30 * 60 * 1000; // photos envoyées après l'entrée (téléphone hors ligne…) : on les attend un peu
+const MAX_ENTREES = 5;
+async function surveillerJournal() {
+  const fichier = join(CACHE, 'journal-surveillance.json');
+  let s = null;
+  try { s = JSON.parse(readFileSync(fichier, 'utf8')); } catch { /* premier passage */ }
+  const repeter = () => console.log(s ? s.sortie : 'Rien de nouveau au journal.');
+  const heure = new Date().getHours();
+  if (s && (heure >= CALME[0] || heure < CALME[1])) return repeter();
+  try {
+    const journal = (await pg.lire()).journal;
+    const sauver = () => { mkdirSync(CACHE, { recursive: true }); writeFileSync(fichier, JSON.stringify(s)); };
+    // Premier passage : tout ce qui est déjà au journal est connu.
+    if (!s) { s = { vus: journal.map((e) => e.id), attente: {}, sortie: 'Rien de nouveau au journal.' }; sauver(); return repeter(); }
+    const vus = new Set(s.vus), maintenant = Date.now(), prets = [];
+    for (const e of journal) {
+      if (vus.has(e.id)) continue;
+      if (e.via !== 'jardinier') {
+        s.attente[e.id] ||= maintenant;
+        let manquantes = 0;
+        for (const cle of e.photos || []) if (!(await pg.trouverPhoto(cle))) manquantes++;
+        if (manquantes && maintenant - s.attente[e.id] < ATTENTE_PHOTOS) continue;
+        prets.push(e);
+      }
+      vus.add(e.id);
+      delete s.attente[e.id];
+    }
+    s.vus = journal.map((e) => e.id).filter((id) => vus.has(id));
+    if (prets.length) {
+      prets.sort((a, b) => a.date.localeCompare(b.date));
+      const montrees = prets.slice(-MAX_ENTREES);
+      s.sortie = [prets.length > MAX_ENTREES ? `${prets.length} nouvelles entrées d'un coup (import ou mise en ligne ?), voici les ${MAX_ENTREES} plus récentes :` : 'Nouvelles entrées du journal :',
+        ...montrees.map((e) => `- [journal:${e.id}] ${texteEntree(e)}`)].join('\n');
+    }
+    sauver();
+  } catch (e) { console.error(e.message); }
+  repeter();
+}
+
 // ---------- Lancement ----------
 const [commande, ...args] = process.argv.slice(2);
 if (!commande) serveurMcp();
 else if (commande === 'inscription') inscription().catch((e) => { console.error('❌ ' + e.message); process.exit(1); });
 else if (commande === 'surveiller') surveiller();
+else if (commande === 'journal') surveillerJournal();
 else if (commande === 'bibliotheque') {
   try {
     const r = indexer(args[0] || DOSSIER_LIVRES);
@@ -126,9 +174,9 @@ else if (commande === 'bibliotheque') {
 }
 else if (commande === 'outil') {
   appeler(args[0], args[1] ? JSON.parse(args[1]) : {})
-    .then((t) => console.log(t))
+    .then((t) => console.log(typeof t === 'string' ? t : `${t.texte}\n(${t.images.length} image(s) jointe(s))`))
     .catch((e) => { console.error('❌ ' + e.message); process.exit(1); });
 } else {
-  console.error('Commandes : (aucune) | inscription | outil <nom> [json] | surveiller | bibliotheque [dossier]');
+  console.error('Commandes : (aucune) | inscription | outil <nom> [json] | surveiller | journal | bibliotheque [dossier]');
   process.exit(1);
 }

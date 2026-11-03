@@ -39,6 +39,10 @@ Les outils du serveur MCP « potager » donnent l'état réel du jardin et les c
 - Noter avec `noter_journal` (type, plante, quantité et unité pour une récolte, `par` = prénom de la personne). Une photo reçue avec le message peut être jointe (`photos` = chemin du fichier).
 - Pour un problème : proposer une cause probable et un remède doux, en cherchant dans les livres (`chercher_dans_les_livres`) ; dire qu'un diagnostic sur photo reste incertain.
 
+## Journal et photos
+- Les entrées écrites sur le site ou l'appli arrivent d'elles-mêmes dans le groupe (tâche planifiée « Journal du potager », toutes les 5 minutes, pas la nuit). Si quelqu'un répond à ce message (« c'est grave ? »), retrouver l'entrée avec `lire_journal`.
+- Pour regarder les photos d'une entrée (diagnostic, comparaison avec l'an dernier) : `photos_journal` avec son identifiant. Pour les renvoyer dans la conversation, recopier les lignes `MEDIA:` que l'outil renvoie.
+
 ## Questions
 - « Que faire ? », « que semer ? » → `que_faire` (ou `point_de_la_semaine`).
 - « Quand semer / planter X ? » → `fiche_plante` (dates calculées chez eux, en pleine terre et sous abri).
