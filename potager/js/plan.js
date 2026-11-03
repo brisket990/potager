@@ -121,11 +121,28 @@
     return h('div', { class: 'plan' }, titrePrint, barre, h('div', { class: 'plan-corps' + (ed.panneauMasque && !ed.sel ? ' sans-panneau' : '') }, palette, zone, panneau));
   };
 
-  // Plante choisie dans la palette, si on peut colorer le terrain selon son besoin de soleil.
-  const planteAuSoleil = () => (ed.outil === 'plante' && App.soleil && ed.heure == null ? PLANTES_PAR_ID[ed.pid] : null);
+  // Ce qui colore le terrain selon le soleil : la plante choisie dans la palette, ou 'semis' quand on pose
+  // une serre, un tunnel ou un châssis (soleil du printemps pour les semis). Seulement si l'ensoleillement est calculé.
+  const cibleSoleil = () => (!App.soleil || ed.heure != null ? null
+    : ed.outil === 'plante' ? PLANTES_PAR_ID[ed.pid] : Calendrier.ABRIS[ed.outil] ? 'semis' : null);
+  const planteAuSoleil = () => (ed.outil === 'plante' ? cibleSoleil() : null);
+  // Meilleur endroit pour l'abri en cours de pose, à sa taille par défaut.
+  const emplacementAbri = () => (cibleSoleil() === 'semis' ? Terrain.meilleurEmplacement(STRUCTURES[ed.outil].w, STRUCTURES[ed.outil].h, App.etat.annee) : null);
+  function poserAuMeilleurEndroit() {
+    const m = emplacementAbri();
+    if (!m) return;
+    const o = { id: uid(), t: ed.outil, x: arrondi(m.x), y: arrondi(m.y), w: arrondi(m.w), h: arrondi(m.h) };
+    objets().push(o);
+    ed.sel = o.id;
+    enregistrer();
+    choisirOutil('select');
+    App.toast(`${STRUCTURES[o.t].n} posé${o.t === 'serre' ? 'e' : ''} à l'endroit le plus ensoleillé au printemps (${m.moy.toFixed(1).replace('.', ',')} h/jour). Tu peux le déplacer ou changer sa taille.`);
+  }
 
-  // Aide en bas du plan, avec la légende des couleurs quand le terrain est coloré pour la plante choisie.
-  const contenuAide = () => [aideOutil(), planteAuSoleil() ? Terrain.legendeAptitude(planteAuSoleil()) : null].filter(Boolean);
+  // Aide en bas du plan, avec la légende des couleurs quand le terrain est coloré selon le soleil.
+  const contenuAide = () => [aideOutil(),
+    emplacementAbri() ? h('button', { class: 'bouton petit primaire', style: { pointerEvents: 'auto', marginLeft: '0.5em' }, onclick: poserAuMeilleurEndroit }, '📍 Le poser au meilleur endroit') : null,
+    cibleSoleil() ? Terrain.legendeAptitude(cibleSoleil()) : null].filter(Boolean);
   function aideOutil() {
     if (ed.outil === 'plante') {
       const p = PLANTES_PAR_ID[ed.pid];
@@ -133,6 +150,8 @@
         (App.soleil ? 'Passe la souris pour le soleil à chaque endroit. ' : 'Calcule l\'ensoleillement (bouton Soleil) pour voir où elle sera bien exposée. ') +
         'Zones rouges hachurées = même famille ces 3 dernières années. Échap pour arrêter.';
     }
+    if (Calendrier.ABRIS[ed.outil]) return `Trace un rectangle (ou clique) pour ajouter : ${STRUCTURES[ed.outil].n}. ` +
+      (App.soleil ? 'Pour des semis : en rouge, les endroits qui manquent de soleil au printemps (mi-février → fin avril) ; le cadre doré montre le meilleur endroit à cette taille.' : 'Calcule l\'ensoleillement (bouton Soleil) pour savoir où le placer.');
     if (STRUCTURES[ed.outil]) return `Trace un rectangle (ou clique) pour ajouter : ${STRUCTURES[ed.outil].n}.`;
     return 'Glisse un objet pour le déplacer, son coin pour le redimensionner. Glisse le fond (ou molette enfoncée) pour te déplacer, molette pour zoomer.';
   }
@@ -306,9 +325,9 @@
       // Ombres à l'heure choisie (recalculées à chaque dessin : on les voit bouger quand on déplace un arbre).
       ed.instant = Terrain.instant(dateInstant());
       if (ed.instant) els.push(S('image', { href: ed.instant.url, x: 0, y: 0, width: ed.instant.nx * ed.instant.pas, height: ed.instant.ny * ed.instant.pas, preserveAspectRatio: 'none', style: 'image-rendering: pixelated', 'pointer-events': 'none' }));
-    } else if (planteAuSoleil()) {
-      // Plante choisie : chaque endroit coloré selon qu'il lui donne assez de soleil (vert) ou non (orange, rouge).
-      const apt = Terrain.aptitude(planteAuSoleil(), App.etat.annee);
+    } else if (cibleSoleil()) {
+      // Plante ou abri à semis en cours de pose : en rouge, les endroits qui ne lui donnent pas assez de soleil.
+      const apt = Terrain.aptitude(cibleSoleil(), App.etat.annee);
       els.push(S('image', { href: apt.url, x: 0, y: 0, width: apt.nx * apt.pas, height: apt.ny * apt.pas, preserveAspectRatio: 'none', style: 'image-rendering: pixelated', 'pointer-events': 'none' }));
     } else if (ed.soleil && App.soleil) {
       const sol = App.soleil;
@@ -357,6 +376,15 @@
       }
     }
 
+    // Abri à semis en cours de pose : le meilleur endroit à sa taille par défaut, en pointillés dorés.
+    const meilleur = emplacementAbri();
+    if (meilleur && !(geste && geste.type === 'trace')) {
+      els.push(S('g', { 'pointer-events': 'none' },
+        S('rect', { x: meilleur.x, y: meilleur.y, width: meilleur.w, height: meilleur.h, fill: 'rgba(255, 214, 0, 0.18)', stroke: '#e0a800', 'stroke-width': 2.5, 'stroke-dasharray': '6 4', 'vector-effect': 'non-scaling-stroke' }),
+        S('text', { x: meilleur.x + meilleur.w / 2, y: meilleur.y - fs(6), 'font-size': fs(12), 'text-anchor': 'middle', class: 'cote', 'stroke-width': fs(3) },
+          `☀️ Meilleur endroit : ${meilleur.moy.toFixed(1).replace('.', ',')} h/jour au printemps`)));
+    }
+
     const sel = ed.sel && trouver(ed.sel);
     if (sel) {
       const p = 6 / s;
@@ -383,7 +411,7 @@
         const txt = ed.outil === 'plante'
           ? `${Math.round(r.w * 100)} × ${Math.round(r.h * 100)} cm · ${App.nbPlants({ pid: ed.pid, w: r.w, h: r.h })} plants` +
             (v ? ` · ${{ ok: '✅', juste: '🟠', insuffisant: '⚠️' }[v.niveau]} ${v.moyenne.toFixed(1).replace('.', ',')} h de soleil` : '')
-          : `${Math.round(r.w * 100)} × ${Math.round(r.h * 100)} cm`;
+          : `${Math.round(r.w * 100)} × ${Math.round(r.h * 100)} cm` + (cibleSoleil() === 'semis' ? texteSemis(Terrain.soleilSemis(r, App.etat.annee)) : '');
         gt.append(S('text', { x: r.x + r.w / 2, y: r.y - fs(6), 'font-size': fs(12), 'text-anchor': 'middle', class: 'cote', 'stroke-width': fs(3) }, txt));
       }
       els.push(gt);
@@ -408,9 +436,12 @@
     return occ ? Soleil.verdict(p, Soleil.mensuel(App.soleil, r), occ, Calendrier.fenetres(p, App.ctx, App.etat.annee, App.decalage(zoneP, objets()))) : null;
   }
 
-  // Sous la souris, avec une plante choisie : heures de soleil à cet endroit pendant sa période critique.
+  const niveauSemis = (v) => (v >= Terrain.SEMIS.soleil ? 'ok' : v >= Terrain.SEMIS.soleil - 1.5 ? 'juste' : 'insuffisant');
+  const texteSemis = (v) => (v == null ? '' : ` · ${{ ok: '✅', juste: '🟠', insuffisant: '⚠️' }[niveauSemis(v)]} ${v.toFixed(1).replace('.', ',')} h de soleil au printemps`);
+
+  // Sous la souris, avec une plante ou un abri choisi : heures de soleil à cet endroit pendant la période qui compte.
   function majSurvol(e) {
-    const p = planteAuSoleil();
+    const p = cibleSoleil();
     if (!p || geste) { survol.hidden = true; return; }
     const [x, y] = point(e);
     const a = Terrain.aptitudeAuPoint(p, App.etat.annee, x, y);
@@ -418,7 +449,8 @@
     const r = survol.parentNode.getBoundingClientRect();
     survol.hidden = false;
     survol.className = 'info-survol niveau-' + a.niveau;
-    survol.textContent = `${{ ok: '✅', juste: '🟠', insuffisant: '⚠️' }[a.niveau]} ${a.heures.toFixed(1).replace('.', ',')} h de soleil par jour pendant ${a.periode} · besoin ${a.besoin} h`;
+    const abri = a.abri ? `${{ serre: 'Sous serre', tunnel: 'Sous tunnel', chassis: 'Sous châssis' }[a.abri]} (${p.perso ? 'dates fixes, non avancées' : `culture avancée de ${Calendrier.ABRIS[a.abri]} semaines`}) : ` : '';
+    survol.textContent = `${{ ok: '✅', juste: '🟠', insuffisant: '⚠️' }[a.niveau]} ${abri}${a.heures.toFixed(1).replace('.', ',')} h de soleil par jour pendant ${a.periode} · ${p === 'semis' ? 'conseillé' : 'besoin'} ${a.besoin} h`;
     survol.style.left = Math.min(e.clientX - r.left + 16, r.width - survol.offsetWidth - 8) + 'px';
     survol.style.top = (e.clientY - r.top + 18) + 'px';
   }

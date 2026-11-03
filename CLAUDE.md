@@ -23,7 +23,7 @@ HTML/CSS/JavaScript **sans framework ni étape de build** : scripts classiques (
 | `js/app.js` | État global `App.etat`, abris, voisins, rotation des cultures, reconnaissance des noms de graines, navigation |
 | `agent/` | Agent jardinier : serveur MCP (`potager-mcp.mjs`) qui charge les fichiers de l'app dans Node (`noyau.mjs`) et expose des outils (`outils.mjs`) |
 | `js/synchro.js` | Compte PocketBase (connexion, inscription par code), potager partagé, invitations, synchronisation (fusion à trois, version, temps réel), photos du journal sur le serveur ; carte « Compte et potager partagé » des Réglages |
-| `js/plan.js` | Éditeur SVG : structures, obstacles (bâtiment, mur, clôture ajourée, haie, arbre), cultures, rotation des objets, fond photo aérienne, curseur d'heure du soleil ; plante choisie → terrain coloré selon son besoin de soleil et étiquette au survol ; panneau de droite repliable (bouton « Infos », mémorisé par appareil) |
+| `js/plan.js` | Éditeur SVG : structures, obstacles (bâtiment, mur, clôture ajourée, haie, arbre), cultures, rotation des objets, fond photo aérienne, curseur d'heure du soleil ; plante choisie → terrain coloré selon son besoin de soleil (rien si assez, rouge sinon, en tenant compte des abris) et étiquette au survol ; serre / tunnel / châssis choisi → soleil des semis (mi-février → fin avril, 6 h) et meilleur emplacement proposé (`Terrain.meilleurEmplacement`) ; panneau de droite repliable (bouton « Infos », mémorisé par appareil) |
 | `js/auto.js` | Arrangement automatique (placement glouton puis améliorations) |
 | `js/vues.js` | Onglets Maintenant, Mes graines, Calendrier, Plantes, Achats, Journal, Réglages |
 

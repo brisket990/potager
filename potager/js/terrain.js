@@ -127,6 +127,7 @@
       App.soleil = res;
       imagesCache.clear();
       aptitudes.clear();
+      emplacements.clear();
       await U.photos.ecrire('grille:soleil', res);
       App.rendre();
       App.toast(res.nbObstacles ? `Ensoleillement calculé avec ${res.nbObstacles} obstacle${res.nbObstacles > 1 ? 's' : ''}.` : "Ensoleillement calculé, mais sans aucun obstacle dessiné : tout le jardin est au plein soleil. Ajoute bâtiments, clôtures et arbres (section Ombre).");
@@ -237,37 +238,61 @@
       !aJour() ? h('p', { class: 'note' }, 'Carte à recalculer (obstacles modifiés).') : null);
   }
 
-  // ---------- Aptitude d'un endroit pour une plante ----------
-  // Même calcul que blocVerdict, case par case : heures de soleil moyennes pendant la période critique de la plante
-  // (en pleine terre), comparées à son besoin. La moyenne étant linéaire dans les 12 valeurs mensuelles, on calcule
-  // une fois le poids de chaque mois, puis chaque case est une simple somme pondérée.
+  // ---------- Aptitude d'un endroit pour une plante, ou pour un abri à semis ----------
+  // Même calcul que blocVerdict, case par case : heures de soleil moyennes pendant la période critique de la plante,
+  // comparées à son besoin. Sous une serre, un tunnel ou un châssis, la culture est avancée (Calendrier.ABRIS) :
+  // sa période critique, donc les mois qui comptent, changent. La moyenne étant linéaire dans les 12 valeurs mensuelles,
+  // on calcule une fois le poids de chaque mois pour chaque décalage, puis chaque case est une simple somme pondérée.
+  // Cible 'semis' : où placer un abri pour les semis de printemps (lumière de mi-février à fin avril, contre l'étiolement).
+  const SEMIS = { soleil: 6, ic: '🌱', n: 'des semis sous abri' };
+  const critSemis = (annee) => ({ debut: new Date(annee, 1, 15), fin: new Date(annee, 3, 30), texte: 'les semis' });
   const aptitudes = new Map();
-  function aptitude(p, annee) {
+  function aptitude(cible, annee) {
     const sol = App.soleil;
     if (!sol) return null;
-    const cle = `${sol.calcule}:${p.id}:${annee}:${App.etat.risque}:${p.perso ? JSON.stringify(p.dates) : ''}`;
+    const semis = cible === 'semis', p = semis ? SEMIS : cible;
+    const abris = semis ? [] : App.plan().objets.filter((o) => Calendrier.ABRIS[o.t]);
+    const cle = semis ? `${sol.calcule}:semis:${annee}` : `${sol.calcule}:${p.id}:${annee}:${App.etat.risque}:${p.perso ? JSON.stringify(p.dates) : ''}:` +
+      JSON.stringify(abris.map((o) => [o.t, o.x, o.y, o.w, o.h, o.rot || 0]));
     if (aptitudes.has(cle)) return aptitudes.get(cle);
-    const occ = Calendrier.occupation(p, App.ctx, annee, 0);
-    const crit = (occ && Soleil.periodeCritique(p, occ, Calendrier.fenetres(p, App.ctx, annee, 0)))
-      || { debut: new Date(annee, 3, 1), fin: new Date(annee, 8, 30), texte: "la belle saison" };
-    const poids = Array.from({ length: 12 }, (_, m) => Soleil.moyennePeriode(Array.from({ length: 12 }, (__, k) => (k === m ? 1 : 0)), crit.debut, crit.fin));
-    const heures = new Float32Array(sol.nx * sol.ny);
-    for (let k = 0; k < heures.length; k++) { let v = 0; for (let m = 0; m < 12; m++) if (poids[m]) v += poids[m] * sol.mois[m][k]; heures[k] = v; }
+    const parDecalage = new Map();
+    const periode = (decal) => {
+      if (!parDecalage.has(decal)) {
+        const occ = semis ? null : Calendrier.occupation(p, App.ctx, annee, decal);
+        const crit = semis ? critSemis(annee) : (occ && Soleil.periodeCritique(p, occ, Calendrier.fenetres(p, App.ctx, annee, decal)))
+          || { debut: new Date(annee, 3, 1), fin: new Date(annee, 8, 30), texte: 'la belle saison' };
+        const poids = Array.from({ length: 12 }, (_, m) => Soleil.moyennePeriode(Array.from({ length: 12 }, (__, k) => (k === m ? 1 : 0)), crit.debut, crit.fin));
+        parDecalage.set(decal, { crit, poids });
+      }
+      return parDecalage.get(decal);
+    };
+    const n = sol.nx * sol.ny;
+    const heures = new Float32Array(n), abriCase = new Array(n).fill(null), critCase = new Array(n);
+    for (let k = 0; k < n; k++) {
+      const cx = ((k % sol.nx) + 0.5) * sol.pas, cy = (Math.floor(k / sol.nx) + 0.5) * sol.pas;
+      const abri = abris.length ? App.abriDe({ x: cx, y: cy, w: 0, h: 0 }, abris) : null;
+      const { crit, poids } = periode(abri ? Calendrier.ABRIS[abri.t] : 0);
+      let v = 0;
+      for (let m = 0; m < 12; m++) if (poids[m]) v += poids[m] * sol.mois[m][k];
+      heures[k] = v; abriCase[k] = abri && abri.t; critCase[k] = crit;
+    }
     const c = document.createElement('canvas');
     c.width = sol.nx; c.height = sol.ny;
     const ctx = c.getContext('2d'), img = ctx.createImageData(sol.nx, sol.ny);
-    for (let k = 0; k < heures.length; k++) img.data.set(couleurAptitude(heures[k] - p.soleil), k * 4);
+    for (let k = 0; k < n; k++) img.data.set(couleurAptitude(heures[k] - p.soleil), k * 4);
     ctx.putImageData(img, 0, 0);
-    const res = { url: c.toDataURL(), heures, crit, besoin: p.soleil, nx: sol.nx, ny: sol.ny, pas: sol.pas };
+    const res = { url: c.toDataURL(), heures, abriCase, critCase, besoin: p.soleil, nx: sol.nx, ny: sol.ny, pas: sol.pas };
     aptitudes.set(cle, res);
     return res;
   }
-  // Écart au besoin (heures) → couleur : vert = assez, orange = juste (comme le verdict), rouge de plus en plus sombre au-delà.
+  // Écart au besoin (heures) → couleur : rien quand le soleil suffit, rouge pâle quand c'est juste (seuils du verdict),
+  // puis rouge de plus en plus foncé et opaque à mesure qu'il manque du soleil.
+  const ROUGES = { juste: [229, 57, 53], manque: [198, 40, 40], sombre: [120, 16, 16] };
   function couleurAptitude(ecart) {
-    if (ecart >= 0) return [67, 160, 71, 120];
-    if (ecart >= -1.5) return [251, 160, 30, 140];
+    if (ecart >= 0) return [0, 0, 0, 0];
+    if (ecart >= -1.5) return [...ROUGES.juste, 70];
     const f = Math.min(1, (-ecart - 1.5) / 3);
-    return [Math.round(229 - 90 * f), Math.round(57 - 37 * f), Math.round(53 - 33 * f), Math.round(150 + 60 * f)];
+    return [...ROUGES.manque.map((c, i) => Math.round(c + (ROUGES.sombre[i] - c) * f)), Math.round(140 + 70 * f)];
   }
   // Ce qu'on affiche sous la souris : heures, besoin et niveau, comme le verdict d'une zone.
   function aptitudeAuPoint(p, annee, x, y) {
@@ -275,14 +300,58 @@
     if (!a) return null;
     const i = Math.floor(x / a.pas), j = Math.floor(y / a.pas);
     if (i < 0 || j < 0 || i >= a.nx || j >= a.ny) return null;
-    const v = a.heures[j * a.nx + i], ecart = v - a.besoin;
+    const k = j * a.nx + i, v = a.heures[k], ecart = v - a.besoin;
     const niveau = ecart >= 0 ? 'ok' : ecart >= -1.5 ? 'juste' : 'insuffisant';
-    return { heures: v, besoin: a.besoin, niveau, periode: a.crit.texte };
+    const crit = a.critCase[k];
+    return { heures: v, besoin: a.besoin, niveau, periode: `${crit.texte} (${fmtDate(crit.debut)} → ${fmtDate(crit.fin)})`, abri: a.abriCase[k] };
   }
-  function legendeAptitude(p) {
-    const cases = [['ok', [67, 160, 71], `assez (${p.soleil} h et +)`], ['juste', [251, 160, 30], 'juste'], ['insuffisant', [229, 57, 53], 'pas assez'], ['tres', [139, 20, 20], 'bien trop sombre']];
+  function legendeAptitude(cible) {
+    const p = cible === 'semis' ? SEMIS : cible;
+    const cases = [[null, `pas de couleur : assez (${p.soleil} h et +)`], [ROUGES.juste, 'un peu juste', 0.35], [ROUGES.manque, 'pas assez'], [ROUGES.sombre, 'bien trop sombre']];
     return h('div', { class: 'legende-soleil' }, h('span', {}, `${p.ic || ''} Soleil pour ${p.n} : `),
-      cases.map(([, c, t]) => h('span', { class: 'case' }, h('span', { class: 'pastille', style: { background: `rgb(${c.join(',')})` } }), t)));
+      cases.map(([c, t, a = 1]) => h('span', { class: 'case' },
+        h('span', { class: 'pastille', style: c ? { background: `rgba(${c.join(',')},${a})` } : { background: 'transparent', border: '1px solid #9aa58f' } }), t)));
+  }
+
+  // Meilleur emplacement d'un abri à semis de taille w × haut (m), dans un sens ou dans l'autre : le plus de soleil
+  // au printemps, sans empiéter sur un obstacle, un autre abri, le compost ou l'eau, et dans la parcelle si elle est connue.
+  const emplacements = new Map();
+  function meilleurEmplacement(w, haut, annee) {
+    const a = aptitude('semis', annee);
+    if (!a) return null;
+    const { nx, ny, pas, heures } = a;
+    const genants = App.plan().objets.filter((o) => Soleil.OBSTACLES[o.t] || Calendrier.ABRIS[o.t] || o.t === 'compost' || o.t === 'eau');
+    const cle = `${App.soleil.calcule}:${w}:${haut}:${annee}:${!!App.etat.geo}:` + JSON.stringify(genants.map((o) => [o.t, o.x, o.y, o.w, o.h, o.rot || 0]));
+    if (emplacements.has(cle)) return emplacements.get(cle);
+    const anneaux = contoursLocaux(App.etat.geo);
+    // Sommes cumulées (heures, cases interdites) pour évaluer chaque position en temps constant.
+    const S = new Float64Array((nx + 1) * (ny + 1)), I = new Int32Array((nx + 1) * (ny + 1));
+    for (let j = 0; j < ny; j++) for (let i = 0; i < nx; i++) {
+      const cx = (i + 0.5) * pas, cy = (j + 0.5) * pas;
+      const interdit = genants.some((o) => G.dedans([cx, cy], o)) || (anneaux.length && !anneaux.some((r) => Soleil.dansPolygone(cx, cy, r)));
+      const k = (j + 1) * (nx + 1) + i + 1;
+      S[k] = heures[j * nx + i] + S[k - 1] + S[k - nx - 1] - S[k - nx - 2];
+      I[k] = (interdit ? 1 : 0) + I[k - 1] + I[k - nx - 1] - I[k - nx - 2];
+    }
+    const somme = (T, i, j, cw, ch) => T[(j + ch) * (nx + 1) + i + cw] - T[j * (nx + 1) + i + cw] - T[(j + ch) * (nx + 1) + i] + T[j * (nx + 1) + i];
+    let meilleur = null;
+    for (const [lw, lh] of w === haut ? [[w, haut]] : [[w, haut], [haut, w]]) {
+      const cw = Math.max(1, Math.ceil(lw / pas - 1e-6)), ch = Math.max(1, Math.ceil(lh / pas - 1e-6)); // cases couvertes, sans dépasser du terrain
+      for (let j = 0; j + ch <= ny; j++) for (let i = 0; i + cw <= nx; i++) {
+        if (somme(I, i, j, cw, ch)) continue;
+        const moy = somme(S, i, j, cw, ch) / (cw * ch);
+        if (!meilleur || moy > meilleur.moy + 0.01) meilleur = { x: i * pas, y: j * pas, w: lw, h: lh, moy };
+      }
+    }
+    if (emplacements.size > 20) emplacements.clear();
+    emplacements.set(cle, meilleur);
+    return meilleur;
+  }
+  // Heures de soleil moyennes d'un rectangle pendant la saison des semis (pour le tracé d'un abri).
+  function soleilSemis(r, annee) {
+    if (!App.soleil) return null;
+    const c = critSemis(annee);
+    return Soleil.moyennePeriode(Soleil.mensuel(App.soleil, r), c.debut, c.fin);
   }
 
   // Ombres à un instant précis : voile bleu-nuit sur ce qui est à l'ombre, léger voile doré au soleil.
@@ -303,5 +372,5 @@
 
   window.Terrain = {
     origineCalcul, instant, contoursLocaux, modalParcelle, calculerSoleil, chargerCache, aJour, image, legende, couleur, blocVerdict, courbeCulture,
-    aptitude, aptitudeAuPoint, legendeAptitude };
+    aptitude, aptitudeAuPoint, legendeAptitude, meilleurEmplacement, soleilSemis, SEMIS };
 })();
