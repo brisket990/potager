@@ -126,6 +126,7 @@
       res.nbObstacles = App.plan().objets.filter((o) => Soleil.OBSTACLES[o.t]).length;
       App.soleil = res;
       imagesCache.clear();
+      aptitudes.clear();
       await U.photos.ecrire('grille:soleil', res);
       App.rendre();
       App.toast(res.nbObstacles ? `Ensoleillement calculé avec ${res.nbObstacles} obstacle${res.nbObstacles > 1 ? 's' : ''}.` : "Ensoleillement calculé, mais sans aucun obstacle dessiné : tout le jardin est au plein soleil. Ajoute bâtiments, clôtures et arbres (section Ombre).");
@@ -236,6 +237,54 @@
       !aJour() ? h('p', { class: 'note' }, 'Carte à recalculer (obstacles modifiés).') : null);
   }
 
+  // ---------- Aptitude d'un endroit pour une plante ----------
+  // Même calcul que blocVerdict, case par case : heures de soleil moyennes pendant la période critique de la plante
+  // (en pleine terre), comparées à son besoin. La moyenne étant linéaire dans les 12 valeurs mensuelles, on calcule
+  // une fois le poids de chaque mois, puis chaque case est une simple somme pondérée.
+  const aptitudes = new Map();
+  function aptitude(p, annee) {
+    const sol = App.soleil;
+    if (!sol) return null;
+    const cle = `${sol.calcule}:${p.id}:${annee}:${App.etat.risque}:${p.perso ? JSON.stringify(p.dates) : ''}`;
+    if (aptitudes.has(cle)) return aptitudes.get(cle);
+    const occ = Calendrier.occupation(p, App.ctx, annee, 0);
+    const crit = (occ && Soleil.periodeCritique(p, occ, Calendrier.fenetres(p, App.ctx, annee, 0)))
+      || { debut: new Date(annee, 3, 1), fin: new Date(annee, 8, 30), texte: "la belle saison" };
+    const poids = Array.from({ length: 12 }, (_, m) => Soleil.moyennePeriode(Array.from({ length: 12 }, (__, k) => (k === m ? 1 : 0)), crit.debut, crit.fin));
+    const heures = new Float32Array(sol.nx * sol.ny);
+    for (let k = 0; k < heures.length; k++) { let v = 0; for (let m = 0; m < 12; m++) if (poids[m]) v += poids[m] * sol.mois[m][k]; heures[k] = v; }
+    const c = document.createElement('canvas');
+    c.width = sol.nx; c.height = sol.ny;
+    const ctx = c.getContext('2d'), img = ctx.createImageData(sol.nx, sol.ny);
+    for (let k = 0; k < heures.length; k++) img.data.set(couleurAptitude(heures[k] - p.soleil), k * 4);
+    ctx.putImageData(img, 0, 0);
+    const res = { url: c.toDataURL(), heures, crit, besoin: p.soleil, nx: sol.nx, ny: sol.ny, pas: sol.pas };
+    aptitudes.set(cle, res);
+    return res;
+  }
+  // Écart au besoin (heures) → couleur : vert = assez, orange = juste (comme le verdict), rouge de plus en plus sombre au-delà.
+  function couleurAptitude(ecart) {
+    if (ecart >= 0) return [67, 160, 71, 120];
+    if (ecart >= -1.5) return [251, 160, 30, 140];
+    const f = Math.min(1, (-ecart - 1.5) / 3);
+    return [Math.round(229 - 90 * f), Math.round(57 - 37 * f), Math.round(53 - 33 * f), Math.round(150 + 60 * f)];
+  }
+  // Ce qu'on affiche sous la souris : heures, besoin et niveau, comme le verdict d'une zone.
+  function aptitudeAuPoint(p, annee, x, y) {
+    const a = aptitude(p, annee);
+    if (!a) return null;
+    const i = Math.floor(x / a.pas), j = Math.floor(y / a.pas);
+    if (i < 0 || j < 0 || i >= a.nx || j >= a.ny) return null;
+    const v = a.heures[j * a.nx + i], ecart = v - a.besoin;
+    const niveau = ecart >= 0 ? 'ok' : ecart >= -1.5 ? 'juste' : 'insuffisant';
+    return { heures: v, besoin: a.besoin, niveau, periode: a.crit.texte };
+  }
+  function legendeAptitude(p) {
+    const cases = [['ok', [67, 160, 71], `assez (${p.soleil} h et +)`], ['juste', [251, 160, 30], 'juste'], ['insuffisant', [229, 57, 53], 'pas assez'], ['tres', [139, 20, 20], 'bien trop sombre']];
+    return h('div', { class: 'legende-soleil' }, h('span', {}, `${p.ic || ''} Soleil pour ${p.n} : `),
+      cases.map(([, c, t]) => h('span', { class: 'case' }, h('span', { class: 'pastille', style: { background: `rgb(${c.join(',')})` } }), t)));
+  }
+
   // Ombres à un instant précis : voile bleu-nuit sur ce qui est à l'ombre, léger voile doré au soleil.
   function instant(date) {
     const geo = origineCalcul();
@@ -253,5 +302,6 @@
   }
 
   window.Terrain = {
-    origineCalcul, instant, contoursLocaux, modalParcelle, calculerSoleil, chargerCache, aJour, image, legende, couleur, blocVerdict, courbeCulture };
+    origineCalcul, instant, contoursLocaux, modalParcelle, calculerSoleil, chargerCache, aJour, image, legende, couleur, blocVerdict, courbeCulture,
+    aptitude, aptitudeAuPoint, legendeAptitude };
 })();

@@ -355,6 +355,17 @@ input.court { width: 9em; flex: 0 0 auto; }
 .ligne-champ.rotation .num { width: 4.5em; }
 input.opacite { width: 90px; accent-color: var(--vert); }
 .legende-flottante.bas-droite { top: auto; left: auto; right: 0.6rem; bottom: 3.4rem; max-width: 420px; }
+/* Carte d'aptitude au soleil de la plante choisie : légende dans l'aide, étiquette qui suit la souris. */
+.aide-plan .legende-soleil { margin-top: 0.3rem; color: var(--texte, #333); }
+.info-survol { position: absolute; z-index: 3; pointer-events: none; background: rgba(255, 255, 255, 0.96); border-radius: 8px; padding: 0.3rem 0.6rem; font-size: 0.82rem; box-shadow: var(--ombre); border-left: 4px solid #43a047; max-width: 300px; }
+.info-survol.niveau-juste { border-left-color: #fba01e; }
+.info-survol.niveau-insuffisant { border-left-color: #c62828; }
+/* Panneau de droite replié. */
+.plan-corps.sans-panneau { grid-template-columns: 250px 1fr; }
+@media (max-width: 1000px) { .plan-corps.sans-panneau { grid-template-columns: 1fr; } }
+.plan-corps.sans-panneau .panneau { display: none; }
+.tete-panneau { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; }
+.tete-panneau h3 { margin: 0; }
 
 /* ---------- Défilement du soleil ---------- */
 .reglette-soleil { width: min(560px, calc(100% - 1.2rem)); }

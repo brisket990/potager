@@ -31,8 +31,10 @@
   const ed = {
     outil: 'select', pid: null, sel: null, vue: null, mois: null, soleil: false, heure: null, lecture: null, instant: null,
     recherche: '', cat: 'tous', mesGraines: false,
+    // Panneau de droite replié quand rien n'est sélectionné (préférence de cet appareil).
+    panneauMasque: U.stock.lire('plan:panneauMasque', false),
   };
-  let svg, groupe, panneau, palette, geste = null;
+  let svg, groupe, panneau, palette, survol, geste = null;
 
   // Orientation de la vue en degrés, sens horaire (0 = nord en haut). Enregistrée avec le potager.
   const angleVue = () => App.etat.orientation || 0;
@@ -85,6 +87,8 @@
         oninput: (e) => { App.etat.fond.opacite = +e.target.value; dessiner(); }, onchange: () => enregistrer() }) : null,
       h('button', { class: 'bouton petit primaire', onclick: () => Auto.ouvrir() }, '🪄 Arrangement auto'),
       h('span', { class: 'espace' }),
+      h('button', { class: 'bouton petit' + (ed.panneauMasque ? '' : ' actif'), 'aria-pressed': !ed.panneauMasque, title: 'Afficher ou masquer le panneau de droite (parcelle, soleil, rotation). Il revient tout seul quand tu sélectionnes un objet.',
+        onclick: () => { ed.panneauMasque = !ed.panneauMasque; U.stock.ecrire('plan:panneauMasque', ed.panneauMasque); App.rendre(); } }, 'ℹ️ Infos'),
       h('button', { class: 'bouton-icone', title: 'Zoom arrière', 'aria-label': 'Zoom arrière', onclick: () => zoomer(1 / 1.25) }, '−'),
       h('button', { class: 'bouton-icone', title: 'Ajuster', 'aria-label': 'Ajuster le plan', onclick: () => { ed.vue = null; ajuster(); } }, '⤢'),
       h('button', { class: 'bouton-icone', title: 'Zoom avant', 'aria-label': 'Zoom avant', onclick: () => zoomer(1.25) }, '+'),
@@ -99,25 +103,34 @@
     svg.addEventListener('pointermove', surDeplacement);
     svg.addEventListener('pointerup', surRelache);
     svg.addEventListener('pointercancel', surRelache);
+    svg.addEventListener('pointerleave', () => { survol.hidden = true; });
     svg.addEventListener('wheel', surMolette, { passive: false });
 
-    const zone = h('div', { class: 'zone-plan' }, svg, boussole(),
+    survol = h('div', { class: 'info-survol', hidden: true });
+    const zone = h('div', { class: 'zone-plan' }, svg, boussole(), survol,
       ed.soleil ? reglette() : null,
       (App.etat.fond || {}).type === 'photo' && App.etat.geo ? h('div', { class: 'legende-flottante bas-droite note' }, "Photo aérienne © IGN. Elle peut dater d'un ou deux ans.") : null,
-      h('div', { class: 'aide-plan' }, aideOutil()));
+      h('div', { class: 'aide-plan' }, ...contenuAide()));
     const titrePrint = h('h1', { class: 'seulement-impression' }, `Plan du potager ${App.etat.annee}`);
 
     rendrePalette();
     rendrePanneau();
     setTimeout(() => { if (!ed.vue) ajuster(); else dessiner(); }, 0);
     if (!plan.objets.length && !ed.vuDemarrage) ed.vuDemarrage = true;
-    return h('div', { class: 'plan' }, titrePrint, barre, h('div', { class: 'plan-corps' }, palette, zone, panneau));
+    return h('div', { class: 'plan' }, titrePrint, barre, h('div', { class: 'plan-corps' + (ed.panneauMasque && !ed.sel ? ' sans-panneau' : '') }, palette, zone, panneau));
   };
 
+  // Plante choisie dans la palette, si on peut colorer le terrain selon son besoin de soleil.
+  const planteAuSoleil = () => (ed.outil === 'plante' && App.soleil && ed.heure == null ? PLANTES_PAR_ID[ed.pid] : null);
+
+  // Aide en bas du plan, avec la légende des couleurs quand le terrain est coloré pour la plante choisie.
+  const contenuAide = () => [aideOutil(), planteAuSoleil() ? Terrain.legendeAptitude(planteAuSoleil()) : null].filter(Boolean);
   function aideOutil() {
     if (ed.outil === 'plante') {
       const p = PLANTES_PAR_ID[ed.pid];
-      return `${p.ic} ${p.n} : clique pour un plant, ou trace un rectangle pour une zone. Zones rouges hachurées = même famille ces 3 dernières années. Échap pour arrêter.`;
+      return `${p.ic} ${p.n} : clique pour un plant, ou trace un rectangle pour une zone. ` +
+        (App.soleil ? 'Passe la souris pour le soleil à chaque endroit. ' : 'Calcule l\'ensoleillement (bouton Soleil) pour voir où elle sera bien exposée. ') +
+        'Zones rouges hachurées = même famille ces 3 dernières années. Échap pour arrêter.';
     }
     if (STRUCTURES[ed.outil]) return `Trace un rectangle (ou clique) pour ajouter : ${STRUCTURES[ed.outil].n}.`;
     return 'Glisse un objet pour le déplacer, son coin pour le redimensionner. Glisse le fond pour te déplacer, molette pour zoomer.';
@@ -187,7 +200,8 @@
     if (outil !== 'select') ed.sel = null;
     rendrePalette(); rendrePanneau(); dessiner();
     const aide = svg.parentNode && svg.parentNode.querySelector('.aide-plan');
-    if (aide) aide.textContent = aideOutil();
+    if (aide) aide.replaceChildren(...contenuAide());
+    if (survol) survol.hidden = true;
     svg.style.cursor = outil === 'select' ? 'default' : 'crosshair';
   }
 
@@ -291,6 +305,10 @@
       // Ombres à l'heure choisie (recalculées à chaque dessin : on les voit bouger quand on déplace un arbre).
       ed.instant = Terrain.instant(dateInstant());
       if (ed.instant) els.push(S('image', { href: ed.instant.url, x: 0, y: 0, width: ed.instant.nx * ed.instant.pas, height: ed.instant.ny * ed.instant.pas, preserveAspectRatio: 'none', style: 'image-rendering: pixelated', 'pointer-events': 'none' }));
+    } else if (planteAuSoleil()) {
+      // Plante choisie : chaque endroit coloré selon qu'il lui donne assez de soleil (vert) ou non (orange, rouge).
+      const apt = Terrain.aptitude(planteAuSoleil(), App.etat.annee);
+      els.push(S('image', { href: apt.url, x: 0, y: 0, width: apt.nx * apt.pas, height: apt.ny * apt.pas, preserveAspectRatio: 'none', style: 'image-rendering: pixelated', 'pointer-events': 'none' }));
     } else if (ed.soleil && App.soleil) {
       const sol = App.soleil;
       els.push(S('image', { href: Terrain.image(ed.mois), x: 0, y: 0, width: sol.nx * sol.pas, height: sol.ny * sol.pas, preserveAspectRatio: 'none', opacity: 0.6, style: 'image-rendering: pixelated', 'pointer-events': 'none' }));
@@ -359,8 +377,11 @@
       const gt = S('g', { transform: transformee(r), 'pointer-events': 'none' },
         S('rect', { x: r.x, y: r.y, width: r.w, height: r.h, fill: 'rgba(21,101,192,0.12)', stroke: '#1565c0', 'stroke-width': 1.5, 'stroke-dasharray': '4 3', 'vector-effect': 'non-scaling-stroke' }));
       if (r.w > 0.05 && r.h > 0.05) {
+        // Zone de plante en cours de tracé : son verdict de soleil, comme dans le panneau une fois posée.
+        const v = verdictZone(r);
         const txt = ed.outil === 'plante'
-          ? `${Math.round(r.w * 100)} × ${Math.round(r.h * 100)} cm · ${App.nbPlants({ pid: ed.pid, w: r.w, h: r.h })} plants`
+          ? `${Math.round(r.w * 100)} × ${Math.round(r.h * 100)} cm · ${App.nbPlants({ pid: ed.pid, w: r.w, h: r.h })} plants` +
+            (v ? ` · ${{ ok: '✅', juste: '🟠', insuffisant: '⚠️' }[v.niveau]} ${v.moyenne.toFixed(1).replace('.', ',')} h de soleil` : '')
           : `${Math.round(r.w * 100)} × ${Math.round(r.h * 100)} cm`;
         gt.append(S('text', { x: r.x + r.w / 2, y: r.y - fs(6), 'font-size': fs(12), 'text-anchor': 'middle', class: 'cote', 'stroke-width': fs(3) }, txt));
       }
@@ -376,6 +397,29 @@
         t.setAttribute('transform', `rotate(${-av} ${c[0]} ${c[1]})`);
       }
     }
+  }
+
+  function verdictZone(r) {
+    const p = planteAuSoleil();
+    if (!p) return null;
+    const zoneP = { ...r, t: 'plante', pid: p.id };
+    const occ = App.occupation(zoneP, objets(), App.etat.annee);
+    return occ ? Soleil.verdict(p, Soleil.mensuel(App.soleil, r), occ, Calendrier.fenetres(p, App.ctx, App.etat.annee, App.decalage(zoneP, objets()))) : null;
+  }
+
+  // Sous la souris, avec une plante choisie : heures de soleil à cet endroit pendant sa période critique.
+  function majSurvol(e) {
+    const p = planteAuSoleil();
+    if (!p || geste) { survol.hidden = true; return; }
+    const [x, y] = point(e);
+    const a = Terrain.aptitudeAuPoint(p, App.etat.annee, x, y);
+    if (!a) { survol.hidden = true; return; }
+    const r = survol.parentNode.getBoundingClientRect();
+    survol.hidden = false;
+    survol.className = 'info-survol niveau-' + a.niveau;
+    survol.textContent = `${{ ok: '✅', juste: '🟠', insuffisant: '⚠️' }[a.niveau]} ${a.heures.toFixed(1).replace('.', ',')} h de soleil par jour pendant ${a.periode} · besoin ${a.besoin} h`;
+    survol.style.left = Math.min(e.clientX - r.left + 16, r.width - survol.offsetWidth - 8) + 'px';
+    survol.style.top = (e.clientY - r.top + 18) + 'px';
   }
 
   const transformee = (o) => (o.rot && !ROND.has(o.t) ? `rotate(${o.rot} ${o.x + o.w / 2} ${o.y + o.h / 2})` : null);
@@ -528,6 +572,7 @@
   }
 
   function surDeplacement(e) {
+    majSurvol(e);
     if (!geste) return;
     const pt = point(e);
     if (geste.type === 'pan') {
@@ -595,7 +640,7 @@
       enregistrer();
       rendrePanneau();
       const aide = svg.parentNode.querySelector('.aide-plan');
-      if (aide) aide.textContent = aideOutil();
+      if (aide) aide.replaceChildren(...contenuAide());
     } else if (g.type === 'deplace' || g.type === 'taille' || g.type === 'rotation') {
       if (g.type !== 'deplace' || g.bouge) { enregistrer(); rendrePanneau(); }
     }
@@ -756,6 +801,10 @@
   function rendrePanneau() {
     if (!panneau) return;
     const o = ed.sel && trouver(ed.sel);
+    // Panneau replié (bouton « Infos ») : il ne s'ouvre que pour l'objet sélectionné.
+    const masque = ed.panneauMasque && !o;
+    if (panneau.parentNode) panneau.parentNode.classList.toggle('sans-panneau', masque);
+    if (masque) { panneau.replaceChildren(); return; }
     panneau.replaceChildren(o ? (o.t === 'plante' ? panneauPlante(o) : panneauStructure(o)) : panneauResume());
   }
 
@@ -873,7 +922,9 @@
     const parFamille = {};
     for (const o of plantes) { const f = PLANTES_PAR_ID[o.pid].fam; parFamille[f] = (parFamille[f] || 0) + 1; }
     return h('div', {},
-      h('h3', {}, `Plan ${App.etat.annee}`),
+      h('div', { class: 'tete-panneau' }, h('h3', {}, `Plan ${App.etat.annee}`),
+        h('button', { class: 'bouton-icone', title: 'Masquer ce panneau (bouton « Infos » pour le rouvrir)', 'aria-label': 'Masquer le panneau',
+          onclick: () => { ed.panneauMasque = true; U.stock.ecrire('plan:panneauMasque', true); App.rendre(); } }, '⟩')),
       plantes.length ? h('p', {}, `${plantes.length} zone${plantes.length > 1 ? 's' : ''} de culture.`) : h('div', { class: 'demarrage' },
         h('p', {}, h('strong', {}, 'Pour commencer :')),
         h('ol', {},
