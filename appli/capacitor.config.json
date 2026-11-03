@@ -1,0 +1,11 @@
+{
+  "appId": "fr.xothiques.potager",
+  "appName": "Mon potager",
+  "webDir": "www",
+  "plugins": {
+    "SystemBars": {
+      "insetsHandling": "css",
+      "initialViewportFitValueHint": "cover"
+    }
+  }
+}

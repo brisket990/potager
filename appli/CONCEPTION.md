@@ -73,6 +73,11 @@ Pas dans l'appli : modifier le plan, l'arrangement automatique, la parcelle, l'e
    npx -y http-server appli/www -p 8660 -c-1 -s
    ```
    puis ouvrir `http://127.0.0.1:8660/?demo` (données de démonstration, sans compte, chargées seulement si l'appareil est vide ; « Continuer avec les données de cet appareil »). Sans `?demo`, l'écran d'accueil propose la connexion au vrai compte : n'y faire que de la lecture tant que l'étape 2 n'est pas faite.
-2. **Coquille Android** : Capacitor, premier APK installé à la main sur un téléphone, connexion au vrai potager en lecture.
+2. ✅ **Coquille Android** (APK de test le 2026-11-03, essayé par l'utilisateur sur son téléphone : fonctionne) : Capacitor 8.6, projet `appli/android` (identifiant `fr.xothiques.potager`), Gradle 9.1 (il faut ça pour Java 25), SDK Android d'Android Studio. Fabriquer l'APK :
+   ```bash
+   powershell -ExecutionPolicy Bypass -File appli/construire.ps1
+   ```
+   Le résultat est dans `appli/apk/mon-potager.apk`, qui n'est pas suivi par git. Pourquoi ce script : la protection de Windows contre les rançongiciels (accès contrôlé aux dossiers) empêche le Java de Temurin 25 d'écrire dans Documents, ce qui donne les erreurs « Cannot create directory ». On ne touche pas à ce réglage : le script construit dans une copie située dans `%LOCALAPPDATA%\MonPotager\appli`. L'APK de test est signé avec la clé de débogage d'Android Studio : pour passer à l'APK signé de l'étape 4, il faudra désinstaller l'appli une fois.
+   Il n'y a pas d'émulateur sur le PC : l'essai se fait sur un vrai téléphone. Sans `?demo`, l'appli s'ouvre sur l'écran de connexion au vrai compte. Tant que l'étape 3 n'est pas faite, ne l'utiliser que pour lire.
 3. **Gestes rapides** : tâche faite, récolte, photo avec la caméra, envoi différé hors ligne.
 4. **Les trois appareils** : icône et nom, clé de signature, installation sur les deux téléphones et la tablette, message « nouvelle version disponible ».

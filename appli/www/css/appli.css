@@ -21,8 +21,9 @@
   --ombre-forte: 0 12px 40px rgba(23, 36, 27, 0.22);
   --rayon: 18px;
   --rayon-petit: 12px;
-  --haut-sur: env(safe-area-inset-top, 0px);
-  --bas-sur: env(safe-area-inset-bottom, 0px);
+  /* Barres du téléphone (heure, boutons) : valeurs fournies par Capacitor dans l'appli, sinon par le navigateur. */
+  --haut-sur: var(--safe-area-inset-top, env(safe-area-inset-top, 0px));
+  --bas-sur: var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px));
   color-scheme: light;
 }
 @media (prefers-color-scheme: dark) {
