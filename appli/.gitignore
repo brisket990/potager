@@ -1,0 +1,6 @@
+# Copies du code du site (voir preparer.mjs)
+www/js/commun/
+node_modules/
+# Clé de signature de l'APK : jamais dans le dépôt
+*.jks
+*.keystore

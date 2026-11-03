@@ -76,6 +76,10 @@ But : un agent « jardinier » à qui l'utilisateur et Angélique (sa compagne) 
 - Pièges Hermes : `hermes gateway setup` sans `-p jardinier` écrit dans le profil actif ; après un changement de jeton, `hermes -p jardinier gateway restart` ; le profil par défaut de la machine est devenu « jardinier » (`hermes profile use proxmox` pour revenir) ; Hermes retouche lui-même la compétence (« Self-improvement review: Skill 'potager' patched ») et l'installateur l'écrase : comparer avec `diff` avant de la recopier et reprendre dans le dépôt ce qui est utile.
 - Comptes de test : noms neutres (« Test A »), jamais un prénom.
 
+## Appli Android (prochaine étape)
+
+Appli Android privée (APK installé à la main, pas de Play Store) pour les téléphones d'Hugo et d'Angélique et une tablette laissée au jardin : lecture du potager (à faire, plan zoomable comme guide, graines, journal, fiches) et gestes rapides (tâche faite, récolte, photo). Pas d'ensoleillement dans l'appli ; le plan reste modifié sur le site, les rappels restent au Jardinier Telegram. Capacitor autour d'une page web qui réutilise `potager/js`. Conception et étapes : [appli/CONCEPTION.md](appli/CONCEPTION.md). Étape 1 (maquette `appli/www`) faite : les fichiers communs sont copiés par `node appli/preparer.mjs` (non suivis par git), `ecrans.js` remplace `App.rendre` par ses propres écrans ; `Synchro` expose `connexion`, `mesJardins`, `lier`, `statut`… pour elle, et émet l'évènement `synchro-statut`.
+
 Sécurité : déconseiller d'exposer le tableau de bord Coolify sur Internet (à gérer en local, `http://IP-locale:8000`) ; seuls PocketBase et l'app doivent être publics.
 
 ## Dépôt

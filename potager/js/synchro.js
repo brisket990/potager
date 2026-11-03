@@ -383,6 +383,7 @@
     S.statut = s;
     for (const el of document.querySelectorAll('.synchro-statut')) el.replaceWith(indicateur());
     for (const el of document.querySelectorAll('.synchro-texte')) el.textContent = texteStatut();
+    document.dispatchEvent(new Event('synchro-statut')); // pour l'appli Android
   }
 
   // Bouton qui lance une action longue, avec un message d'erreur lisible.
@@ -570,6 +571,11 @@
     },
     connecte: () => !!(S.auth && S.meta),
     nomJardin: () => S.meta && S.meta.nom,
+    // Pour l'appli Android (appli/), qui a ses propres écrans de compte.
+    connexion, mesJardins, lier, deconnexion, texteStatut,
+    statut: () => S.statut,
+    prenom: () => (S.auth ? prenom(S.auth.record) : null),
+    serveur: () => S.serveur,
     oublier() { fermerFlux(); localStorage.removeItem('synchro'); localStorage.removeItem('pb_auth'); },
   };
 })();
